@@ -1,3 +1,26 @@
 [vault]
 title = "Edda example vault"
 types = ["Concept", "Paper", "Person", "Project"]
+
+# The Claude model each job uses.
+[models]
+ingest = "claude-sonnet-5-5"
+query = "claude-sonnet-5-5"
+lint = "claude-opus-5-5"
+research = "claude-opus-5-5"
+summary = "claude-haiku-5-5"
+
+# Tokens of context each job may pack into a prompt, and the longest reply it may ask for.
+[budgets]
+ingest = 60000
+query = 40000
+lint = 80000
+research = 80000
+max_output_tokens = 8000
+
+[drivers.web]
+timeout_seconds = 20
+max_bytes = 5000000
+
+[drivers.pdf]
+library = "pypdf"
