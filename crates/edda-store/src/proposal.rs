@@ -61,6 +61,14 @@ impl Change {
         }
     }
 
+    /// Writes the page id in its canonical form, so `/transformer.md` and `transformer.md` are the same page in
+    /// proposals and in the journal.
+    fn normalize_page(&mut self) -> Result<()> {
+        let (Self::Edit { page, .. } | Self::NewPage { page, .. } | Self::Flag { page, .. }) = self;
+        *page = PageId::new(page)?.to_string();
+        Ok(())
+    }
+
     /// The text this change adds, which citations attach to.
     fn added_texts(&self) -> Vec<&str> {
         match self {
@@ -127,7 +135,8 @@ impl Vault {
     }
 
     /// Checks a change against the vault as it is now and stores it as a pending proposal.
-    pub fn propose(&self, job: &str, change: Change, rationale: &str) -> Result<Proposal> {
+    pub fn propose(&self, job: &str, mut change: Change, rationale: &str) -> Result<Proposal> {
+        change.normalize_page()?;
         self.check_change(&change)?;
         let proposal = Proposal {
             id: self.next_proposal_id()?,
@@ -399,20 +408,60 @@ fn check_rev(page: &Page, base_rev: u64) -> Result<()> {
     }
 }
 
+/// Replaces the one place `old` appears in `body`. When it does not appear exactly as given, runs of whitespace are
+/// treated as equal (a model quoting hard-wrapped Markdown often joins the lines), but it must still appear once.
 fn replace_once(body: &str, old: &str, new: &str, page: &PageId) -> Result<String> {
-    let count = if old.is_empty() {
-        0
+    let exact: Vec<(usize, usize)> = if old.is_empty() {
+        Vec::new()
     } else {
-        body.matches(old).count()
+        body.match_indices(old)
+            .map(|(i, m)| (i, i + m.len()))
+            .collect()
     };
-    if count != 1 {
-        return Err(StoreError::EditDoesNotApply {
+    let spans = if exact.is_empty() {
+        loose_matches(body, old)
+    } else {
+        exact
+    };
+    match spans.as_slice() {
+        [(start, end)] => Ok(format!("{}{new}{}", &body[..*start], &body[*end..])),
+        _ => Err(StoreError::EditDoesNotApply {
             page: page.to_string(),
             old: old.to_owned(),
-            count,
-        });
+            count: spans.len(),
+        }),
     }
-    Ok(body.replacen(old, new, 1))
+}
+
+/// Where `needle` appears in `haystack` when any run of whitespace matches any other: byte spans, not overlapping.
+fn loose_matches(haystack: &str, needle: &str) -> Vec<(usize, usize)> {
+    let words: Vec<&str> = needle.split_whitespace().collect();
+    let Some(first) = words.first() else {
+        return Vec::new();
+    };
+    let mut spans = Vec::new();
+    let mut from = 0;
+    while let Some(found) = haystack[from..].find(first) {
+        let start = from + found;
+        let mut end = start + first.len();
+        let matched = words[1..].iter().all(|word| {
+            let rest = &haystack[end..];
+            let gap = rest.len() - rest.trim_start().len();
+            if gap > 0 && rest[gap..].starts_with(word) {
+                end += gap + word.len();
+                true
+            } else {
+                false
+            }
+        });
+        if matched {
+            spans.push((start, end));
+            from = end;
+        } else {
+            from = start + first.len();
+        }
+    }
+    spans
 }
 
 /// The added texts with a footnote reference placed after each citation's claim.
@@ -680,6 +729,64 @@ mod tests {
         assert!(matches!(
             vault.preview(&p),
             Err(StoreError::Conflict { current: 3, .. })
+        ));
+    }
+
+    #[test]
+    fn edits_match_across_line_wrapping_but_only_once() {
+        let id = PageId::new("a.md").unwrap();
+        let body = "Built around\n[attention](/attention.md). It has\n  no recurrence.\n";
+        let joined = "Built around [attention](/attention.md).";
+        assert_eq!(
+            replace_once(body, joined, "X.", &id).unwrap(),
+            "X. It has\n  no recurrence.\n"
+        );
+
+        let twice = "a b\nand a\n b\n";
+        assert!(matches!(
+            replace_once(twice, "a  b", "c", &id),
+            Err(StoreError::EditDoesNotApply { count: 2, .. })
+        ));
+        let exact_wins = "one two\none\ntwo\n";
+        assert_eq!(
+            replace_once(exact_wins, "one two", "1", &id).unwrap(),
+            "1\none\ntwo\n"
+        );
+        assert!(matches!(
+            replace_once(body, "   ", "x", &id),
+            Err(StoreError::EditDoesNotApply { count: 0, .. })
+        ));
+        assert_eq!(loose_matches("aXa b a b", "a b"), [(2, 5), (6, 9)]);
+        assert!(
+            loose_matches("ab", "a b").is_empty(),
+            "words must be separated by whitespace"
+        );
+    }
+
+    #[test]
+    fn page_ids_are_stored_in_canonical_form() {
+        let (_dir, vault, _) = vault();
+        let root_relative = Change::Flag {
+            page: "/attention.md".into(),
+            flag: "gap".into(),
+            note: "n".into(),
+        };
+        assert_eq!(
+            vault
+                .propose("j", root_relative, "r")
+                .unwrap()
+                .change
+                .page(),
+            "attention.md"
+        );
+        let bad = Change::Flag {
+            page: "../x.md".into(),
+            flag: "gap".into(),
+            note: "n".into(),
+        };
+        assert!(matches!(
+            vault.propose("j", bad, "r"),
+            Err(StoreError::InvalidPageId { .. })
         ));
     }
 

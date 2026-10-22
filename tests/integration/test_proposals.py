@@ -127,3 +127,11 @@ def test_rolls_back_to_a_revision_the_kernel_wrote(vault_copy: Path) -> None:
     assert kernel.search("lions") == []
     with pytest.raises(NotFoundError, match="no journaled revision 1"):
         kernel.rollback("bm25.md", 1)
+
+
+def test_root_relative_page_ids_land_in_the_page_history(vault_copy: Path) -> None:
+    kernel = Kernel(vault_copy)
+    proposal = kernel.propose_edit("owner", "/bm25.md", 1, [TextEdit(old="orphan.", new="orphan, for now.")], "r")
+    assert proposal.change.page == "bm25.md"
+    kernel.accept(proposal.id)
+    assert [e.action for e in kernel.history("bm25.md")][-1] == "edit_page"

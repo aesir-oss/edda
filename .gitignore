@@ -40,3 +40,7 @@ triage-*.md
 
 # BMad personal settings (team settings in _bmad/config.toml and _bmad/custom/config.toml are committed)
 _bmad/config.user.toml
+
+# What running jobs against the example vault leaves behind
+examples/vault/proposals/
+examples/vault/jobs/
