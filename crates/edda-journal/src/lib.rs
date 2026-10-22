@@ -5,7 +5,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
-use edda_store::{LogEntry, PageId};
+use edda_store::{LogEntry, PageId, StoreError, Vault};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -33,6 +33,8 @@ pub enum JournalError {
     },
     #[error("journal chain broken at entry {seq}: {reason}")]
     Broken { seq: u64, reason: String },
+    #[error(transparent)]
+    Store(#[from] StoreError),
 }
 
 pub type Result<T, E = JournalError> = std::result::Result<T, E>;
@@ -118,7 +120,8 @@ impl Entry {
 
 /// `journal/`: segment files `000001.jsonl`, `000002.jsonl`, ... holding [`SEGMENT_LEN`] entries each.
 ///
-/// One process appends at a time; M1 has a single local user, and the scheduler takes the lock from M4.
+/// One process appends at a time: Edda has a single local user for now, and the scheduler (edda-sched) takes the
+/// lock when it lands.
 #[derive(Debug)]
 pub struct Journal {
     dir: PathBuf,
@@ -251,6 +254,16 @@ impl Journal {
             })
             .collect())
     }
+}
+
+/// Regenerates the vault's `log.md` from its journal, with page titles read from the pages that still exist. Returns the
+/// number of entries written.
+pub fn write_log(vault: &Vault) -> Result<usize> {
+    let journal = Journal::open(vault.journal_dir())?;
+    let entries =
+        journal.log_entries(|id| vault.read_page(id).ok().map(|p| p.title().to_owned()))?;
+    vault.write_log(&entries)?;
+    Ok(entries.len())
 }
 
 fn segments(dir: &Path) -> Result<Vec<PathBuf>> {

@@ -40,8 +40,8 @@ def test_search_links_sources_and_graph(vault_copy: Path) -> None:
     issues = kernel.graph_issues()
     assert issues.orphans == ["bm25.md"]
     assert issues.broken_links == []
-    assert kernel.history("attention.md") == []
-    assert kernel.verify_journal() == 0
+    assert [e.action for e in kernel.history("attention.md")] == ["create_page", "verify"]
+    assert kernel.verify_journal() == 8
 
 
 def test_reports_errors_as_python_exceptions(vault_copy: Path, tmp_path: Path) -> None:
@@ -103,3 +103,15 @@ def test_refresh_picks_up_hand_edits(vault_copy: Path) -> None:
     assert kernel.search("zebra") == []
     kernel.refresh_index()
     assert kernel.search("zebra")[0].id == "bm25.md"
+
+
+def test_writes_log_md_from_the_journal(vault_copy: Path) -> None:
+    kernel = Kernel(vault_copy)
+    log_md = vault_copy / "wiki" / "log.md"
+    committed = log_md.read_text(encoding="utf-8")
+    log_md.unlink()
+    assert kernel.write_log() == 8
+    assert log_md.read_text(encoding="utf-8") == committed
+    page = kernel.read_page("log.md")
+    assert page.issues == []
+    assert '<a href="/page/attention.md">Attention mechanism</a>' in page.html

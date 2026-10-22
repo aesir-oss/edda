@@ -13,6 +13,10 @@ function Header() {
         Edda
       </Link>
       <span className="muted">{vault.data?.title}</span>
+      <nav className="nav">
+        <Link to="/">Library</Link>
+        <Link to="/page/log.md">Log</Link>
+      </nav>
     </header>
   )
 }

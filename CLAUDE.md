@@ -1,8 +1,9 @@
 # CLAUDE.md
 
 Project guidance for aesir-oss/edda. The global CLAUDE.md (toolchain, harness, git workflow) applies; this file covers
-what is specific here. The design is the Edda architecture document (draft 0.2); M1 is files, history and read-only
-browsing, and nothing in M1 calls an LLM.
+what is specific here. The design is the Edda architecture document (draft 0.2). Its four milestones are the
+GitHub milestones Files and History, Ingest and Review, Ask, and Run on Its Own. Files and History is files, history
+and read-only browsing, and nothing in it calls an LLM.
 
 ## Architecture
 
@@ -47,6 +48,6 @@ After changing an API route or model, `pixi run gen-api` rewrites `web/openapi.j
 
 - `examples/vault/raw/` files are named by the SHA-256 of their bytes and never edited; the whitespace hooks skip
   them so a fixer cannot change a byte. Add a source by hashing it (`shasum -a 256`) and writing its `.meta.toml`.
-- `wiki/index.md` and `wiki/log.md` are generated:
-  `EDDA_WRITE_EXAMPLES=1 pixi run cargo test -p edda-store --test example_vault` rewrites them, and the same test
-  fails when they are stale.
+- `wiki/index.md`, `wiki/log.md` and `journal/000001.jsonl` are generated. `EDDA_WRITE_EXAMPLES=1 pixi run cargo test
+  -p edda-store --test example_vault` rewrites `index.md`; the same with `-p edda-journal` rewrites the journal from the
+  history in `crates/edda-journal/tests/example_vault.rs` and `log.md` from it. Both tests fail when the files are stale.

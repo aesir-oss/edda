@@ -11,6 +11,7 @@ test('shows the vault title and the library at the root', async () => {
   render(<App />)
   expect(await screen.findByText('Example vault')).toBeInTheDocument()
   expect(await screen.findByText('3 pages')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Log' })).toHaveAttribute('href', '/page/log.md')
 })
 
 test('unknown routes link back to the library', async () => {
