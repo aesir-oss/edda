@@ -23,6 +23,10 @@ and read-only browsing, and nothing in it calls an LLM.
 Everything runs through pixi: `pixi run test`, `lint`, `check`, `cov`, `ci`, `dev`. After changing Rust,
 `pixi run native` rebuilds the extension in place (the Python tasks depend on it).
 
+`pixi run act` runs the CI workflow locally in Docker (`-j unit --matrix python-version:3.14` for one job; the image
+is pulled on first use and builds run under amd64 emulation, so expect minutes). Every step passes under act, but the job
+ends red: act cannot find `node` for setup-pixi's post-job cleanup (nektos/act#107). GitHub's runners are unaffected.
+
 After changing an API route or model, `pixi run gen-api` rewrites `web/openapi.json` and `web/src/api/schema.d.ts`;
 `pixi run ci` fails (`api-drift`) while either is stale.
 
