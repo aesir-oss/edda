@@ -13,15 +13,19 @@ repository = "https://github.com/aesir-oss/edda"
 publish = false
 
 [workspace.dependencies]
+edda-index = { path = "crates/edda-index" }
+edda-journal = { path = "crates/edda-journal" }
 edda-store = { path = "crates/edda-store" }
 
 hex = "0.4.3"
+jiff = "0.2.38"
 indexmap = { version = "2.14", features = ["serde"] }
 pulldown-cmark = { version = "0.13.5", default-features = false, features = ["html"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 serde_yaml_ng = "0.10.0"
 sha2 = "0.11.1"
+tantivy = { version = "0.27", default-features = false, features = ["mmap", "stopwords", "lz4-compression", "stemmer"] }
 tempfile = "3.27"
 thiserror = "2.0.21"
 toml = "1.1"
