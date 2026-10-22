@@ -27,6 +27,26 @@ pub enum StoreError {
     CorruptSource { hash: String, actual: String },
     #[error("{path}: {reason}")]
     Config { path: PathBuf, reason: String },
+    #[error("no proposal {0}")]
+    ProposalNotFound(String),
+    #[error("proposal {0} is no longer pending")]
+    NotPending(String),
+    #[error("{page} is at revision {current}, not {base_rev}; read it again and redo the edit")]
+    Conflict {
+        page: String,
+        base_rev: u64,
+        current: u64,
+    },
+    #[error("the text to replace appears {count} times in {page}, not once: {old:?}")]
+    EditDoesNotApply {
+        page: String,
+        old: String,
+        count: usize,
+    },
+    #[error("{0} already exists")]
+    PageExists(String),
+    #[error("the claim is not in the text this proposal adds: {0:?}")]
+    ClaimNotFound(String),
 }
 
 impl StoreError {

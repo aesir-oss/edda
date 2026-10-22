@@ -1,6 +1,6 @@
 """The shapes the kernel's read-side system calls return, shared by the Python API and its OpenAPI schema."""
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -119,3 +119,71 @@ class JournalEntry(_Model):
     data: Any = None
     prev: str
     hash: str
+
+
+class TextEdit(_Model):
+    """Replace ``old``, which must appear exactly once in the page body, with ``new``."""
+
+    old: str
+    new: str
+
+
+class EditChange(_Model):
+    """``propose_edit``: text edits to an existing page, made against revision ``base_rev``."""
+
+    kind: Literal["edit"]
+    page: str
+    base_rev: int
+    edits: list[TextEdit]
+
+
+class NewPageChange(_Model):
+    """``propose_page``: a new page, created as a draft."""
+
+    kind: Literal["new_page"]
+    page: str
+    type: str
+    title: str
+    description: str
+    tags: list[str] = Field(default_factory=list)
+    body: str
+
+
+class FlagChange(_Model):
+    """``flag``: a contradiction, outdated claim or gap, for review. It changes no text."""
+
+    kind: Literal["flag"]
+    page: str
+    flag: str
+    note: str
+
+
+class ProposalCitation(_Model):
+    """A claim in a proposal's added text, backed by a span of a raw source."""
+
+    id: str
+    claim: str
+    raw: str
+    resource: str
+    title: str | None = None
+    locator: str
+
+
+class ProposalPreview(_Model):
+    """What accepting the proposal would do, and the kernel rules that keep it from being applied."""
+
+    diff: str
+    issues: list[str]
+
+
+class Proposal(_Model):
+    """A change a job (or the owner) submitted, waiting for review."""
+
+    id: str
+    job: str
+    created: str
+    change: Annotated[EditChange | NewPageChange | FlagChange, Field(discriminator="kind")]
+    citations: list[ProposalCitation] = Field(default_factory=list)
+    rationale: str
+    status: Literal["pending", "accepted", "rejected"]
+    preview: ProposalPreview

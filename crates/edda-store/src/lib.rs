@@ -9,6 +9,7 @@ mod generated;
 pub mod markdown;
 mod page;
 mod page_id;
+mod proposal;
 mod raw;
 mod vault;
 
@@ -18,6 +19,7 @@ pub use frontmatter::{Extra, Frontmatter, Generated, Resource, Source, Verificat
 pub use generated::{LogEntry, render_index, render_log};
 pub use page::{Context, Issue, Page};
 pub use page_id::PageId;
+pub use proposal::{Change, Citation, OWNER, Preview, Proposal, Status, TextEdit};
 pub use raw::{RawEntry, RawMeta, RawStore, sha256_hex};
 pub use vault::{Snapshot, Vault};
 

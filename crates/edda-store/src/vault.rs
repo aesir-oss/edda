@@ -150,6 +150,13 @@ pub struct Snapshot<'a> {
     raw: Vec<RawEntry>,
 }
 
+impl Snapshot<'_> {
+    /// Counts a page that does not exist yet, so a proposal's links to the page it creates are not broken.
+    pub fn add_page(&mut self, id: PageId) {
+        self.pages.insert(id);
+    }
+}
+
 impl Context for Snapshot<'_> {
     fn allowed_type(&self, kind: &str) -> bool {
         self.config.types.iter().any(|t| t == kind)
