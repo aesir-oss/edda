@@ -9,6 +9,14 @@ export type VaultInfo = Schemas['VaultInfo']
 export type Citation = Schemas['Citation']
 export type SourceSummary = Schemas['SourceSummary']
 export type AddedSource = Schemas['AddedSource']
+export type Source = Schemas['Source']
+export type Proposal = Schemas['Proposal']
+export type ProposalCitation = Schemas['ProposalCitation']
+export type TextEdit = Schemas['TextEdit']
+export type PageRevision = Schemas['PageRevision']
+export type AcceptRequest = Schemas['AcceptRequest']
+export type Decision = Schemas['Decision']
+export type JobRun = Schemas['JobRun']
 
 export class ApiError extends Error {
   readonly status: number
@@ -36,6 +44,12 @@ async function request<T>(path: string, params: Params = {}, init: RequestInit =
   return (await response.json()) as T
 }
 
+const post = (body: unknown): RequestInit => ({
+  method: 'POST',
+  body: JSON.stringify(body),
+  headers: { 'Content-Type': 'application/json' },
+})
+
 /** Page ids contain slashes, which stay as path separators; each segment is escaped. */
 const pagePath = (id: string) => id.split('/').map(encodeURIComponent).join('/')
 
@@ -52,4 +66,14 @@ export const api = {
   page: (id: string) => request<Page>(`/api/pages/${pagePath(id)}`),
   links: (id: string) => request<Links>(`/api/links/${pagePath(id)}`),
   search: (q: string, k = 20) => request<SearchHit[]>('/api/search', { q, k }),
+  source: (hash: string, lines: { start?: number; end?: number } = {}) =>
+    request<Source>(`/api/sources/${encodeURIComponent(hash)}`, lines),
+  proposals: (status?: string) => request<Proposal[]>('/api/proposals', { status }),
+  proposal: (id: string) => request<Proposal>(`/api/proposals/${encodeURIComponent(id)}`),
+  accept: (id: string, revision: AcceptRequest = {}) =>
+    request<Decision>(`/api/proposals/${encodeURIComponent(id)}/accept`, {}, post(revision)),
+  reject: (id: string, reason: string) =>
+    request<Decision>(`/api/proposals/${encodeURIComponent(id)}/reject`, {}, post({ reason })),
+  jobs: () => request<JobRun[]>('/api/jobs'),
+  ingest: (source: string) => request<JobRun>('/api/jobs/ingest', {}, post({ source })),
 }

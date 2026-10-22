@@ -1,4 +1,4 @@
-import type { Page, PageSummary } from './api/client'
+import type { Page, PageSummary, Proposal } from './api/client'
 
 export const pages: PageSummary[] = [
   {
@@ -35,4 +35,41 @@ export const attention: Page = {
     { id: 'notes', resource: 'raw:887e', title: null, note: null, raw: null, cited: false },
   ],
   issues: ['source notes is never cited'],
+}
+
+const preview = { diff: '--- a/bm25.md\n+++ b/bm25.md\n@@ -1 +1 @@\n-orphan.\n+orphan. Zebras graze.\n context\n', issues: [] }
+
+export const editProposal: Proposal = {
+  id: 'prop_000001',
+  job: 'ingest:ab12',
+  created: '2026-10-22T10:00:00Z',
+  change: { kind: 'edit', page: 'bm25.md', base_rev: 1, edits: [{ old: 'orphan.', new: 'orphan. Zebras graze.' }] },
+  citations: [
+    { id: 'notes-l3', claim: 'Zebras graze.', raw: 'ab12', resource: 'raw:ab12', title: 'Notes', locator: 'lines 3-4' },
+    { id: 'notes-s6', claim: 'graze', raw: 'ab12', resource: 'raw:ab12', title: null, locator: 'Section 6' },
+  ],
+  rationale: 'adds zebras',
+  status: 'pending',
+  preview,
+}
+
+export const pageProposal: Proposal = {
+  id: 'prop_000002',
+  job: 'ingest:ab12',
+  created: '2026-10-22T10:01:00Z',
+  change: { kind: 'new_page', page: 'zebra.md', type: 'Concept', title: 'Zebra', description: 'Striped.', body: 'Zebras.\n' },
+  rationale: 'a new page',
+  status: 'pending',
+  preview: { diff: '+Zebras.\n', issues: ['added text cites no source: "Zebras."'] },
+}
+
+export const flagProposal: Proposal = {
+  id: 'prop_000003',
+  job: 'lint',
+  created: '2026-10-22T10:02:00Z',
+  change: { kind: 'flag', page: 'bm25.md', flag: 'gap', note: 'No example.' },
+  citations: [],
+  rationale: 'gap',
+  status: 'pending',
+  preview: { diff: '', issues: [] },
 }
