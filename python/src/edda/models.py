@@ -194,3 +194,12 @@ class AddedSource(_Model):
 
     source: SourceSummary
     added: bool
+
+
+class Related(_Model):
+    """A page related to a text; ``via`` says whether its score came from its own match or from a link."""
+
+    id: str
+    title: str
+    score: float
+    via: Literal["search", "link"]

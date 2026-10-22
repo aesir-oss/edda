@@ -149,3 +149,56 @@ fn reports_unreadable_vaults() {
     fs::write(vault.wiki_dir().join("bad.md"), "no frontmatter").unwrap();
     assert!(matches!(Index::rebuild(&vault), Err(IndexError::Store(_))));
 }
+
+#[test]
+fn finds_pages_related_to_a_text_and_their_neighbours() {
+    let (_dir, vault) = example();
+    let index = Index::open(&vault).unwrap();
+    let text = "Notes on ranking: BM25 weighs rare terms and saturates term frequency. Long documents are penalized.";
+    let related = index.related(text, 10).unwrap();
+    assert_eq!(
+        (related[0].id.as_str(), related[0].via.as_str()),
+        ("bm25.md", "search")
+    );
+    assert_eq!(related[0].title, "BM25");
+
+    let text = "A transformer stacks attention layers; queries, keys and values come from the same sequence.";
+    let related = index.related(text, 10).unwrap();
+    let ids: Vec<&str> = related.iter().map(|r| r.id.as_str()).collect();
+    assert!(
+        ids.contains(&"attention.md") && ids.contains(&"transformer.md"),
+        "{ids:?}"
+    );
+    let paper = related
+        .iter()
+        .find(|r| r.id == "papers/attention-is-all-you-need.md")
+        .unwrap();
+    assert!(paper.score > 0.0);
+    assert!(related.windows(2).all(|w| w[0].score >= w[1].score));
+
+    assert!(index.related("   ", 10).unwrap().is_empty());
+    assert!(index.related(text, 0).unwrap().is_empty());
+    assert_eq!(index.related(text, 1).unwrap().len(), 1);
+}
+
+#[test]
+fn link_neighbours_are_found_through_links() {
+    let (_dir, vault) = example();
+    let mut page = vault.read_page(&id("bm25.md")).unwrap();
+    page.body
+        .push_str("\nRelated: [Attention](/attention.md).\n");
+    vault.write_page(&page).unwrap();
+    let index = Index::open(&vault).unwrap();
+    let related = index
+        .related(
+            "BM25 saturates term frequency and penalizes long documents",
+            10,
+        )
+        .unwrap();
+    let attention = related.iter().find(|r| r.id == "attention.md").unwrap();
+    assert_eq!(
+        attention.via, "link",
+        "its score comes from the link, not its own match"
+    );
+    assert!(related.iter().any(|r| r.via == "link"), "{related:?}");
+}
