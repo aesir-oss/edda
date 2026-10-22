@@ -19,7 +19,7 @@ def test_missing_keys_take_defaults(tmp_path: Path) -> None:
     assert config.vault["title"] == "x"
     assert (config.llm.ingest, config.llm.anthropic.ingest) == ("anthropic", "claude-haiku-5-5")
     assert (config.llm.query, config.llm.anthropic.query) == ("local", "claude-sonnet-5-5")
-    assert config.budgets.ingest == 60_000
+    assert config.budgets.ingest == 20_000
     assert config.drivers.web.timeout_seconds == 20
 
 

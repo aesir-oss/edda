@@ -69,5 +69,9 @@ only exists after it merges.
   set in `[llm.local]` in `edda.toml`. A job set to `anthropic` in `[llm]` uses Claude, and only with the person's own
   credentials (`ANTHROPIC_API_KEY` or an `ant auth login` profile). Never put a key in `edda.toml`, the vault, a test
   or a log, and never fall back from one provider to the other silently.
+- The local default is Qwen3-14B (official Qwen GGUF, 4-bit) served by `pixi run -e llm llm-serve`. Weights are
+  downloaded by `pixi run llm-fetch`, verified against the SHA-256 pinned in `edda.llm.models`, and kept in
+  `~/.cache/edda/models`; never commit them. Adding a model to `KNOWN` needs the owner's approval of the model and
+  its source. `[budgets]` defaults fit a 32k-token local context.
 - CI never calls a model: tests replay recorded responses (`httpx.MockTransport` for local, a fake SDK client returning
   `BetaMessage` objects for Anthropic). The SDK's error classes take `httpx2` objects, not `httpx` ones.

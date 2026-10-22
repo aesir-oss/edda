@@ -26,12 +26,13 @@ research = "claude-opus-5-5"
 summary = "claude-haiku-5-5"
 fallbacks = true
 
-# Tokens of context each job may pack into a prompt, and the longest reply it may ask for.
+# Tokens of context each job may pack into a prompt, and the longest reply it may ask for. These fit a local model
+# served with a 32k-token context (`pixi run -e llm llm-serve`); raise them for jobs set to "anthropic".
 [budgets]
-ingest = 60000
-query = 40000
-lint = 80000
-research = 80000
+ingest = 20000
+query = 16000
+lint = 24000
+research = 24000
 max_output_tokens = 8000
 
 [drivers.web]
