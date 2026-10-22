@@ -1,0 +1,4 @@
+# The owner's rules. Hosts the importers may fetch from; nothing else is reachable. `*.example.org` matches
+# subdomains, not example.org itself.
+[network]
+allow = ["arxiv.org", "en.wikipedia.org"]

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Okapi BM25 - Wikipedia</title></head>
+<body>
+<nav><a href="/">Main page</a> <a href="/random">Random article</a> Donate Log in</nav>
+<main>
+<article>
+<h1>Okapi BM25</h1>
+<p>In information retrieval, Okapi BM25 is a ranking function used by search engines to estimate the relevance of
+documents to a given search query. It is based on the probabilistic retrieval framework developed in the 1970s and
+1980s by Stephen E. Robertson, Karen Spärck Jones, and others.</p>
+<h2>The ranking function</h2>
+<p>BM25 is a bag-of-words retrieval function that ranks a set of documents based on the query terms appearing in each
+document, regardless of their proximity within the document. It weighs each term by its inverse document frequency.</p>
+<p>The free parameters k1 and b are usually chosen, in absence of an advanced optimization, as k1 in [1.2, 2.0] and
+b = 0.75. The parameter b controls how strongly the document length normalises the term frequency.</p>
+<table>
+<tr><th>Parameter</th><th>Typical value</th></tr>
+<tr><td>k1</td><td>1.2</td></tr>
+<tr><td>b</td><td>0.75</td></tr>
+</table>
+<p>See also <a href="https://en.wikipedia.org/wiki/Tf%E2%80%93idf">tf-idf</a>, the weighting BM25 refines.</p>
+</article>
+</main>
+<footer>Text is available under the Creative Commons Attribution-ShareAlike License. Privacy policy. Cookie statement.</footer>
+</body>
+</html>

@@ -93,3 +93,31 @@ def test_a_job_proposes_and_the_owner_revises_and_accepts_over_http(vault_copy: 
     assert [e for e, _ in heard if e == "job"] == ["job", "job", "job"]
     decided = [(d["id"], d["status"]) for e, d in heard if e == "proposal" and d["job"] is None]
     assert decided == [(decision["proposal"]["id"], "accepted"), (proposal_id, "rejected")]
+
+
+def test_imports_a_web_page_the_policy_allows(vault_copy: Path) -> None:
+    import httpx
+
+    html = (REPO_ROOT / "tests" / "fixtures" / "bm25.html").read_bytes()
+    web = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, content=html, headers={"content-type": "text/html"})
+        )
+    )
+    client = TestClient(create_app(vault=vault_copy, web_client=web))
+    url = "https://en.wikipedia.org/wiki/Okapi_BM25"
+    first = client.post("/api/sources/web", json={"url": url})
+    assert first.status_code == 201
+    source = first.json()["source"]
+    assert (source["url"], source["driver"], source["title"]) == (url, "web", "Okapi BM25")
+    assert client.post("/api/sources/web", json={"url": url}).status_code == 200
+    text = client.get(f"/api/sources/{source['hash']}").json()["text"]
+    assert text.startswith("# Okapi BM25")
+
+    refused = client.post("/api/sources/web", json={"url": "https://example.com/"})
+    assert (refused.status_code, refused.json()["detail"]) == (
+        403,
+        "example.com is not in [network] allow in policy.toml",
+    )
+    (vault_copy / "policy.toml").write_text("[network\n")
+    assert client.post("/api/sources/web", json={"url": url}).status_code == 500

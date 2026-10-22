@@ -1114,6 +1114,32 @@
         ],
         "title": "VaultInfo",
         "type": "object"
+      },
+      "WebImportRequest": {
+        "description": "A web page to fetch and store as a raw source.",
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "minLength": 1,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "WebImportRequest",
+        "type": "object"
       }
     }
   },
@@ -1986,6 +2012,64 @@
           }
         },
         "summary": "Import Markdown Source",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
+    "/api/sources/web": {
+      "post": {
+        "description": "Fetches a page from a host ``[network] allow`` lists and stores its readable text as Markdown.",
+        "operationId": "import_web_source_api_sources_web_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddedSource"
+                }
+              }
+            },
+            "description": "The same text was already stored"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddedSource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "description": "policy.toml does not allow fetching from that host"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "502": {
+            "description": "The page could not be fetched"
+          }
+        },
+        "summary": "Import Web Source",
         "tags": [
           "sources"
         ]

@@ -322,6 +322,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/web": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Web Source
+         * @description Fetches a page from a host ``[network] allow`` lists and stores its readable text as Markdown.
+         */
+        post: operations["import_web_source_api_sources_web_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{source_hash}": {
         parameters: {
             query?: never;
@@ -786,6 +806,16 @@ export interface components {
             pages: number;
             /** Title */
             title: string;
+        };
+        /**
+         * WebImportRequest
+         * @description A web page to fetch and store as a raw source.
+         */
+        WebImportRequest: {
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url: string;
         };
     };
     responses: never;
@@ -1331,6 +1361,62 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    import_web_source_api_sources_web_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebImportRequest"];
+            };
+        };
+        responses: {
+            /** @description The same text was already stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedSource"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedSource"];
+                };
+            };
+            /** @description policy.toml does not allow fetching from that host */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The page could not be fetched */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
