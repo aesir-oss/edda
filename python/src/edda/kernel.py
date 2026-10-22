@@ -7,6 +7,7 @@ from pydantic import TypeAdapter
 from edda import _kernel
 from edda._kernel import ConflictError, InvalidRequestError, KernelError, NotFoundError
 from edda.models import (
+    AddedSource,
     GraphIssues,
     JournalEntry,
     Links,
@@ -112,6 +113,23 @@ class Kernel:
     def flag(self, job: str, page_id: str, kind: str, note: str) -> Proposal:
         """``flag``: report a contradiction, outdated claim or gap on a page, for review."""
         return Proposal.model_validate_json(self._kernel.flag(job, page_id, kind, note))
+
+    def add_source(
+        self,
+        data: bytes,
+        *,
+        extension: str | None = None,
+        title: str | None = None,
+        url: str | None = None,
+        driver: str | None = None,
+        by: str = "owner",
+    ) -> AddedSource:
+        """Stores ``data`` in ``raw/`` under its SHA-256, journals it and refreshes the index.
+
+        Adding bytes that are already stored changes nothing and returns the stored source with ``added`` false.
+        """
+        raw = self._kernel.add_source(data, extension, title, url, driver, by)
+        return AddedSource.model_validate_json(raw)
 
     def accept(self, proposal_id: str, by: str = "owner") -> JournalEntry:
         """Accepts a pending proposal on behalf of ``by`` and applies it; returns the journal entry it wrote.

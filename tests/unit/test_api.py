@@ -8,6 +8,7 @@ from edda.api import create_app
 from edda.api.app import get_today, is_stale
 from edda.kernel import InvalidRequestError, Kernel, NotFoundError
 from edda.models import (
+    AddedSource,
     BrokenLink,
     Citation,
     GraphIssues,
@@ -154,3 +155,18 @@ def test_is_stale_compares_dates(stale_after: str | None, expected: bool) -> Non
 
 def test_get_today_is_a_date() -> None:
     assert isinstance(get_today(), date)
+
+
+def test_imports_markdown_from_the_request_body(client: TestClient, kernel: MagicMock) -> None:
+    kernel.add_source.return_value = AddedSource(source=SourceSummary(hash="ab", title="Notes"), added=True)
+    response = client.post("/api/sources/markdown", params={"filename": "n.md"}, content=b"# Notes\n")
+    assert (response.status_code, response.json()["source"]["title"]) == (201, "Notes")
+    assert kernel.add_source.call_args.args == (b"# Notes\n",)
+    kernel.add_source.return_value = AddedSource(source=SourceSummary(hash="ab"), added=False)
+    assert client.post("/api/sources/markdown", content=b"# Notes\n").status_code == 200
+    assert client.post("/api/sources/markdown", content=b"").status_code == 400
+
+
+def test_refuses_oversized_uploads(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("edda.api.app.MAX_UPLOAD_BYTES", 4)
+    assert client.post("/api/sources/markdown", content=b"# too long").status_code == 413

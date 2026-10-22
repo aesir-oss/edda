@@ -14,7 +14,7 @@ and read-only browsing, and nothing in it calls an LLM.
 | `crates/edda-index/` | tantivy BM25 search and the link graph in `.edda/index/`, rebuilt from the files whenever they change |
 | `crates/edda-kernel/` | The syscall gate: accepts or rejects proposals; the only code that writes pages, and it journals every change with the page as written |
 | `crates/edda-py/` | PyO3 bindings, built by maturin into `edda._kernel`; a thin layer, tested from Python |
-| `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `api` (read-only FastAPI), `log` (structlog) |
+| `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `drivers` (importers), `api` (FastAPI), `log` (structlog) |
 | `web/` | Vite + React + TypeScript shell |
 | `examples/vault/` | A small hand-written vault the tests and `pixi run dev` use |
 | `tests/unit`, `tests/integration` | Python tests; Rust tests live in each crate, web tests next to their components |

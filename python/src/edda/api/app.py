@@ -1,4 +1,4 @@
-"""The read-only FastAPI app over one vault: pages, search, sources, links and the link graph."""
+"""The FastAPI app over one vault: pages, search, sources, links and the link graph, and importing sources."""
 
 import os
 import time
@@ -13,13 +13,25 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from edda import okf_version
+from edda.drivers import DriverError, import_markdown
 from edda.kernel import InvalidRequestError, Kernel, NotFoundError
 from edda.log import configure_logging
-from edda.models import GraphIssues, JournalEntry, Links, Page, PageSummary, SearchHit, Source, SourceSummary
+from edda.models import (
+    AddedSource,
+    GraphIssues,
+    JournalEntry,
+    Links,
+    Page,
+    PageSummary,
+    SearchHit,
+    Source,
+    SourceSummary,
+)
 
 log = structlog.get_logger("edda.api")
 
 VAULT_ENV = "EDDA_VAULT"
+MAX_UPLOAD_BYTES = 10_000_000
 
 
 class VaultInfo(BaseModel):
@@ -101,6 +113,10 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastA
     async def not_found(_: Request, exc: NotFoundError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=404)
 
+    @app.exception_handler(DriverError)
+    async def undriveable(_: Request, exc: DriverError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+
     @app.exception_handler(InvalidRequestError)
     async def invalid(_: Request, exc: InvalidRequestError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
@@ -142,6 +158,30 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastA
     @app.get("/api/sources", tags=["sources"])
     def list_sources(kernel: KernelDep) -> list[SourceSummary]:
         return kernel.sources()
+
+    @app.post(
+        "/api/sources/markdown",
+        tags=["sources"],
+        status_code=201,
+        responses={200: {"model": AddedSource, "description": "The same bytes were already stored"}},
+        openapi_extra={"requestBody": {"required": True, "content": {"text/markdown": {"schema": {"type": "string"}}}}},
+    )
+    async def import_markdown_source(
+        request: Request,
+        response: Response,
+        kernel: KernelDep,
+        filename: Annotated[str | None, Query(description="The file's name, the title of last resort")] = None,
+        url: Annotated[str | None, Query(description="Where the file came from, if anywhere")] = None,
+        title: Annotated[str | None, Query(description="Overrides the title read from the file")] = None,
+    ) -> AddedSource:
+        """Stores the request body, a Markdown file, unedited as a raw source."""
+        data = await request.body()
+        if len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, f"sources are limited to {MAX_UPLOAD_BYTES} bytes")
+        added = import_markdown(kernel, data, filename=filename, url=url, title=title)
+        if not added.added:
+            response.status_code = 200
+        return added
 
     @app.get("/api/pages/{page_id:path}", tags=["pages"])
     def read_page(page_id: str, kernel: KernelDep) -> Page:

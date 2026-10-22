@@ -1,12 +1,63 @@
 //! The syscall gate: the one place a proposal becomes a change to the vault. Accepting writes the page, bumps its
 //! `edda_rev`, records who generated and who verified it, appends the journal entry and regenerates `index.md` and
-//! `log.md`. Rejecting records the decision. Nothing else in Edda writes pages.
+//! `log.md`. Rejecting records the decision. Nothing else in Edda writes pages. Adding a raw source is journaled here
+//! too, so the history of a vault covers its sources as well as its pages.
 
 use edda_journal::{Entry, Journal, JournalError, NewEntry, write_log};
 use edda_store::{
-    Change, Generated, OWNER, Page, Proposal, Status, StoreError, Vault, Verification,
+    Change, Generated, OWNER, Page, Proposal, RawEntry, RawMeta, Status, StoreError, Vault,
+    Verification, sha256_hex,
 };
 use serde_json::json;
+
+/// What adding a source did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AddedSource {
+    pub source: RawEntry,
+    /// The journal entry; `None` when the same bytes were already stored, which changes nothing.
+    pub entry: Option<Entry>,
+}
+
+/// Stores a raw source under its SHA-256 and journals it. `added` defaults to now. Adding bytes that are already
+/// stored returns the stored source and records nothing.
+pub fn add_source(
+    vault: &Vault,
+    bytes: &[u8],
+    extension: Option<&str>,
+    meta: &RawMeta,
+    by: &str,
+) -> Result<AddedSource> {
+    let raw = vault.raw();
+    if let Ok(existing) = raw.resolve(&sha256_hex(bytes)) {
+        return Ok(AddedSource {
+            source: existing,
+            entry: None,
+        });
+    }
+    let mut journal = Journal::open(vault.journal_dir())?;
+    let mut meta = meta.clone();
+    meta.added.get_or_insert_with(now);
+    let source = raw.add(bytes, extension, &meta)?;
+    let name = source
+        .meta
+        .title
+        .clone()
+        .unwrap_or_else(|| source.hash[..12].to_owned());
+    let entry = journal.append(NewEntry {
+        at: Some(now()),
+        actor: by.to_owned(),
+        action: "add_source".to_owned(),
+        page: None,
+        rev: None,
+        summary: format!("added source {name}"),
+        data: json!({ "hash": source.hash, "url": source.meta.url, "driver": source.meta.driver }),
+    })?;
+    write_log(vault)?;
+    Ok(AddedSource {
+        source,
+        entry: Some(entry),
+    })
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum KernelError {
@@ -350,5 +401,60 @@ mod tests {
             "nothing decided without a journal"
         );
         assert_eq!(read(&vault).frontmatter.edda_rev, Some(2));
+    }
+}
+
+#[cfg(test)]
+mod source_tests {
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn adding_a_source_journals_it_once() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("wiki")).unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let meta = RawMeta {
+            title: Some("Notes".into()),
+            driver: Some("markdown".into()),
+            ..Default::default()
+        };
+        let first = add_source(&vault, b"# Notes\n", Some("md"), &meta, "owner").unwrap();
+        let entry = first.entry.unwrap();
+        assert_eq!(
+            (entry.action.as_str(), entry.summary.as_str()),
+            ("add_source", "added source Notes")
+        );
+        assert_eq!(entry.data["driver"], "markdown");
+        assert!(first.source.meta.added.is_some());
+        let again = add_source(
+            &vault,
+            b"# Notes\n",
+            Some("md"),
+            &RawMeta::default(),
+            "owner",
+        )
+        .unwrap();
+        assert_eq!((again.source, again.entry), (first.source, None));
+
+        let untitled = add_source(&vault, b"x", None, &RawMeta::default(), "owner").unwrap();
+        assert!(untitled.entry.unwrap().summary.starts_with("added source "));
+        assert!(
+            fs::read_to_string(vault.wiki_dir().join("log.md"))
+                .unwrap()
+                .contains("added source Notes")
+        );
+
+        fs::write(vault.journal_dir().join("000001.jsonl"), "garbage\n").unwrap();
+        assert!(matches!(
+            add_source(&vault, b"y", None, &RawMeta::default(), "owner"),
+            Err(KernelError::Journal(_))
+        ));
+        assert_eq!(
+            vault.raw().list().unwrap().len(),
+            2,
+            "nothing stored without a journal entry"
+        );
     }
 }
