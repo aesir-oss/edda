@@ -1,9 +1,171 @@
 :root {
-  font-family: system-ui, -apple-system, sans-serif;
-  line-height: 1.5;
-  color-scheme: light dark;
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --ink: #1c2026;
+  --muted: #5d6673;
+  --rule: #dfe2e6;
+  --accent: #2f4fc2;
+  --bad: #b3261e;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418;
+    --surface: #181c22;
+    --ink: #e4e7eb;
+    --muted: #99a2ae;
+    --rule: #2a3038;
+    --accent: #9aabff;
+    --bad: #ff8f86;
+  }
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.2rem;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.toolbar input {
+  flex: 1 1 240px;
+}
+
+input,
+select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.row-title {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.row-text {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  margin-right: 6px;
+}
+
+.badge-muted {
+  color: var(--muted);
+}
+
+.page-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 32px;
+}
+
+@media (max-width: 800px) {
+  .page-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.prose {
+  max-width: 70ch;
+}
+
+.prose .footnote-definition {
+  display: flex;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.prose .footnote-definition p {
+  margin: 0;
+}
+
+.prose .footnote-definition:first-of-type {
+  border-top: 1px solid var(--rule);
+  margin-top: 24px;
+  padding-top: 12px;
+}
+
+aside h2 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.sources,
+.backlinks {
+  padding-left: 1.2em;
+  font-size: 0.92rem;
+}
+
+.issues,
+.error {
+  color: var(--bad);
 }
