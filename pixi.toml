@@ -120,14 +120,32 @@ pre-commit-run = "pre-commit run --all-files"
 ci = { depends-on = ["pre-commit-run", "build", "check", "lint", "api-drift", "cov"] }
 
 # The API on :8000 (uvicorn's default) and the Vite dev server on :5173 (Vite's), which proxies /api to the API.
-# Both are arguments: `pixi run dev 8765 5199`. EDDA_VAULT picks the vault.
+# Both are arguments: `pixi run dev 8765 5199`. They serve .edda/dev-vault, a copy of examples/vault made on the first
+# run and kept between runs, so imports and accepted edits never touch the committed example. `pixi run dev-init`
+# replaces the copy with a fresh one, then starts the same way.
+dev-vault = { args = [
+  { arg = "mode", default = "keep" },
+], cmd = "python -m edda.devvault $PIXI_PROJECT_ROOT {{ mode }}" }
 dev = { args = [
   { arg = "api_port", default = "8000" },
   { arg = "web_port", default = "5173" },
 ], cmd = "uvicorn edda.api.app:create_app --factory --reload --port {{ api_port }} & EDDA_API=http://127.0.0.1:{{ api_port }} npm --prefix web run dev -- --port {{ web_port }} --strictPort", depends-on = [
   "native",
   "web-install",
-], env = { EDDA_VAULT = "$PIXI_PROJECT_ROOT/examples/vault" } }
+  "dev-vault",
+], env = { EDDA_VAULT = "$PIXI_PROJECT_ROOT/.edda/dev-vault" } }
+dev-init = { args = [
+  { arg = "api_port", default = "8000" },
+  { arg = "web_port", default = "5173" },
+], depends-on = [
+  { task = "dev-vault", args = [
+    "fresh",
+  ] },
+  { task = "dev", args = [
+    "{{ api_port }}",
+    "{{ web_port }}",
+  ] },
+], description = "start dev with a fresh copy of the example vault" }
 
 [feature.py314.dependencies]
 python = "3.14.*"

@@ -17,7 +17,7 @@ and read-only browsing, and nothing in it calls an LLM.
 | `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `drivers` (importers: Markdown files, and web pages from hosts `policy.toml` allows), `policy` (reads `policy.toml` until edda-policy, #37, gives verdicts), `llm` (local models by default, Anthropic with the user's own key), `context` (packing ranked pages into a token budget), `jobs` (the job runner, the ingest job, and the queue that runs jobs for the API), `review` (accepting, revising and rejecting proposals), `api` (FastAPI, with server-sent events at `/api/events`), `log` (structlog) |
 | `web/` | Vite + React + TypeScript shell |
 | `docs/design/` | Design notes: decisions and the reference material behind them, such as `document-ingestion.md` |
-| `examples/vault/` | A small hand-written vault the tests and `pixi run dev` use |
+| `examples/vault/` | A small hand-written vault the tests use; `pixi run dev` serves a copy of it in `.edda/dev-vault` (kept between runs; `pixi run dev-init` starts from a fresh copy) |
 | `tests/unit`, `tests/integration` | Python tests; Rust tests live in each crate, web tests next to their components |
 
 ## Commands

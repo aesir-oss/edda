@@ -27,12 +27,18 @@ the pre-commit hooks and the web app's npm packages.
 pixi run dev
 ```
 
-Serves the API on <http://127.0.0.1:8000> (OpenAPI at `/docs`) and the app on <http://127.0.0.1:5173>, both reading
-`examples/vault`. The app has two views: the Library (browse, filter by tag, search) and a Page view (the rendered
-page, citations on hover, its sources and backlinks).
+Serves the API on <http://127.0.0.1:8000> (OpenAPI at `/docs`) and the app on <http://127.0.0.1:5173>. The app has
+three views: the Library (browse, filter, search, add a Markdown file or a web page), a Page view (the rendered page,
+citations on hover, its sources and backlinks) and Review (the model's proposals, to accept, edit or reject).
 
-Set `EDDA_VAULT` to browse another vault. The ports are uvicorn's and Vite's defaults; when either is taken, pass
-others, API first:
+Both serve `.edda/dev-vault`, a copy of `examples/vault` made on the first run and kept between runs, so what you
+import or accept never changes the committed example. To start again from a fresh copy:
+
+```sh
+pixi run dev-init
+```
+
+The ports are uvicorn's and Vite's defaults; when either is taken, pass others, API first (`dev-init` takes them too):
 
 ```sh
 pixi run dev 8765 5199
