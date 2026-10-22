@@ -63,6 +63,7 @@ export const api = {
       { filename: file.name },
       { method: 'POST', body: file, headers: { 'Content-Type': 'text/markdown' } },
     ),
+  importWeb: (url: string, title?: string) => request<AddedSource>('/api/sources/web', {}, post({ url, title })),
   page: (id: string) => request<Page>(`/api/pages/${pagePath(id)}`),
   links: (id: string) => request<Links>(`/api/links/${pagePath(id)}`),
   search: (q: string, k = 20) => request<SearchHit[]>('/api/search', { q, k }),

@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -16,7 +17,8 @@ from pydantic import BaseModel
 
 from edda import okf_version, review
 from edda.api.events import Events, stream
-from edda.drivers import DriverError, import_markdown
+from edda.config import ConfigError, load_config
+from edda.drivers import DriverError, FetchFailed, NotAllowed, import_markdown, import_url
 from edda.jobs.background import Jobs
 from edda.kernel import ConflictError, InvalidRequestError, Kernel, NotFoundError
 from edda.log import configure_logging
@@ -36,7 +38,9 @@ from edda.models import (
     SearchHit,
     Source,
     SourceSummary,
+    WebImportRequest,
 )
+from edda.policy import PolicyError, load_policy
 
 log = structlog.get_logger("edda.api")
 
@@ -98,7 +102,6 @@ def is_stale(stale_after: str | None, today: date) -> bool:
 
 def run_ingest(kernel: Kernel, source: str) -> list[str]:
     """Runs the ingest job with the vault's own model settings; returns the ids of the proposals it made."""
-    from edda.config import load_config
     from edda.jobs.ingest import ingest
     from edda.llm import LLM
 
@@ -106,10 +109,15 @@ def run_ingest(kernel: Kernel, source: str) -> list[str]:
     return ingest(kernel, LLM(config), config, source).proposals
 
 
-def create_app(vault: Path | None = None, kernel: Kernel | None = None, ingest: Ingest = run_ingest) -> FastAPI:
+def create_app(
+    vault: Path | None = None,
+    kernel: Kernel | None = None,
+    ingest: Ingest = run_ingest,
+    web_client: httpx.Client | None = None,
+) -> FastAPI:
     """Builds the API for ``vault`` (default: the ``EDDA_VAULT`` environment variable), or around ``kernel``.
 
-    ``ingest`` runs the ingest job; tests pass one that needs no model.
+    ``ingest`` runs the ingest job and ``web_client`` fetches web pages; tests pass ones that need no model or network.
     """
     configure_logging()
     if vault is None and kernel is None and os.environ.get(VAULT_ENV):
@@ -156,6 +164,20 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None, ingest: 
     @app.exception_handler(DriverError)
     async def undriveable(_: Request, exc: DriverError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(ConfigError)
+    @app.exception_handler(PolicyError)
+    async def misconfigured(_: Request, exc: ValueError) -> JSONResponse:
+        log.error("vault_misconfigured", error=str(exc))
+        return JSONResponse({"detail": str(exc)}, status_code=500)
+
+    @app.exception_handler(NotAllowed)
+    async def not_allowed(_: Request, exc: NotAllowed) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=403)
+
+    @app.exception_handler(FetchFailed)
+    async def fetch_failed(_: Request, exc: FetchFailed) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
 
     @app.exception_handler(InvalidRequestError)
     async def invalid(_: Request, exc: InvalidRequestError) -> JSONResponse:
@@ -223,6 +245,25 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None, ingest: 
         if len(data) > MAX_UPLOAD_BYTES:
             raise HTTPException(413, f"sources are limited to {MAX_UPLOAD_BYTES} bytes")
         added = import_markdown(kernel, data, filename=filename, url=url, title=title)
+        if not added.added:
+            response.status_code = 200
+        return added
+
+    @app.post(
+        "/api/sources/web",
+        tags=["sources"],
+        status_code=201,
+        responses={
+            200: {"model": AddedSource, "description": "The same text was already stored"},
+            403: {"description": "policy.toml does not allow fetching from that host"},
+            502: {"description": "The page could not be fetched"},
+        },
+    )
+    def import_web_source(body: WebImportRequest, response: Response, kernel: KernelDep) -> AddedSource:
+        """Fetches a page from a host ``[network] allow`` lists and stores its readable text as Markdown."""
+        config = load_config(kernel.vault).drivers.web
+        network = load_policy(kernel.vault).network
+        added = import_url(kernel, body.url, network=network, config=config, client=web_client, title=body.title)
         if not added.added:
             response.status_code = 200
         return added

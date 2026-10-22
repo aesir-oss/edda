@@ -253,3 +253,10 @@ class IngestRequest(_Model):
     """The raw source to ingest, by full hash or unique prefix."""
 
     source: str = Field(min_length=1)
+
+
+class WebImportRequest(_Model):
+    """A web page to fetch and store as a raw source."""
+
+    url: str = Field(min_length=1)
+    title: str | None = None

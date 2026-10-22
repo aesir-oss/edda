@@ -58,3 +58,27 @@ test('names untitled sources by hash and shows errors', async () => {
   fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('y.md')] } })
   expect(await screen.findByRole('alert')).toHaveTextContent('the file is empty')
 })
+
+test('adds a web page by address', async () => {
+  const fetchMock = mockApi({
+    '/api/sources/web': { source: { hash: 'ef'.repeat(32), title: 'Okapi BM25' }, added: true },
+  })
+  renderAt('/', <AddSource />)
+  const button = screen.getByRole('button', { name: 'Add web page' })
+  expect(button).toBeDisabled()
+  const address = screen.getByLabelText('Web page address')
+  fireEvent.change(address, { target: { value: ' https://en.wikipedia.org/wiki/Okapi_BM25 ' } })
+  fireEvent.click(button)
+  expect(await screen.findByText('Added Okapi BM25')).toBeInTheDocument()
+  expect(address).toHaveValue('')
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+  expect(url).toBe('/api/sources/web')
+  expect(JSON.parse(String(init.body))).toEqual({ url: 'https://en.wikipedia.org/wiki/Okapi_BM25' })
+  expect(screen.getByRole('button', { name: 'Ingest' })).toBeInTheDocument()
+
+  mockApi({ '/api/sources/web': { status: 403, detail: 'example.com is not in [network] allow in policy.toml' } })
+  fireEvent.change(address, { target: { value: 'https://example.com/' } })
+  fireEvent.submit(address.closest('form') as HTMLFormElement)
+  expect(await screen.findByRole('alert')).toHaveTextContent('not in [network] allow')
+  expect(address).toHaveValue('https://example.com/')
+})

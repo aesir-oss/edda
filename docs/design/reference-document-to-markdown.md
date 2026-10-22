@@ -66,32 +66,34 @@ You can easily spin up a unified file ingestion system using **MarkItDown**:
 from pathlib import Path
 from markitdown import MarkItDown
 
+
 def ingest_documents_to_markdown(input_dir: str, output_dir: str):
     """
-    Scans a folder, dynamically handles PDFs, Office documents, 
+    Scans a folder, dynamically handles PDFs, Office documents,
     and images, translating them into structured .md files.
     """
     md_converter = MarkItDown()
     in_path = Path(input_dir)
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Target all document variations
     extensions = ["*.pdf", "*.docx", "*.pptx", "*.xlsx", "*.png", "*.jpg"]
-    
+
     for ext in extensions:
         for file_path in in_path.glob(ext):
             try:
                 print(f"Parsing: {file_path.name}...")
                 result = md_converter.convert(str(file_path))
-                
+
                 # Construct markdown file output
                 md_filename = f"{file_path.stem}.md"
                 with open(out_path / md_filename, "w", encoding="utf-8") as f:
                     f.write(result.text_content)
-                    
+
             except Exception as e:
                 print(f"Failed to convert {file_path.name}: {str(e)}")
+
 
 # Execution example
 # ingest_documents_to_markdown("./raw_inputs", "./markdown_outputs")

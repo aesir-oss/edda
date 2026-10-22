@@ -310,3 +310,17 @@ textarea {
   border-color: var(--accent);
   color: var(--surface);
 }
+
+.add-source {
+  flex-wrap: wrap;
+}
+
+.add-web {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 320px;
+}
+
+.add-web input {
+  flex: 1;
+}
