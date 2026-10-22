@@ -3,15 +3,16 @@
 
 mod graph;
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use edda_store::{PageId, StoreError, Vault, sha256_hex};
 use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
+use tantivy::query::{MoreLikeThisQuery, QueryParser};
 use tantivy::schema::{
-    Field, IndexRecordOption, STORED, STRING, Schema, TantivyDocument, TextFieldIndexing,
-    TextOptions, Value,
+    Field, IndexRecordOption, OwnedValue, STORED, STRING, Schema, TantivyDocument,
+    TextFieldIndexing, TextOptions, Value,
 };
 use tantivy::snippet::SnippetGenerator;
 use tantivy::{IndexReader, ReloadPolicy, doc};
@@ -22,6 +23,8 @@ pub use graph::{BrokenLink, Graph, Node, OutLink};
 const FORMAT: &str = "edda-index 1";
 const WRITER_MEMORY: usize = 50_000_000;
 const SNIPPET_CHARS: usize = 180;
+/// A linked page counts for this fraction of the score of the page that links to it or is linked from it.
+const LINK_DECAY: f32 = 0.5;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexError {
@@ -61,6 +64,16 @@ pub struct Hit {
     pub score: f32,
     /// A passage of the body with the matched terms in `<b>`; the text is HTML-escaped.
     pub snippet: String,
+}
+
+/// A page related to a text. `via` says what gave it its score: its own BM25 match (`search`) or a link to or from a
+/// page that matched (`link`).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Related {
+    pub id: String,
+    pub title: String,
+    pub score: f32,
+    pub via: String,
 }
 
 /// A page's links in both directions.
@@ -215,6 +228,73 @@ impl Index {
         hits.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.id.cmp(&b.id)));
         hits.truncate(k);
         Ok(hits)
+    }
+
+    /// Pages related to a text, such as a new source, best first: pages similar to it by BM25, then the pages those
+    /// link to or are linked from, scored at half their neighbour's score. Equal scores are ordered by page id.
+    pub fn related(&self, text: &str, k: usize) -> Result<Vec<Related>> {
+        let f = self.fields;
+        if text.trim().is_empty() || k == 0 {
+            return Ok(Vec::new());
+        }
+        let query = MoreLikeThisQuery::builder()
+            .with_min_doc_frequency(1)
+            .with_min_term_frequency(1)
+            .with_min_word_length(3)
+            .with_max_query_terms(40)
+            .with_document_fields(vec![(f.body, vec![OwnedValue::Str(text.to_owned())])]);
+        let searcher = self.reader.searcher();
+        let top = searcher.search(&query, &TopDocs::with_limit(k).order_by_score())?;
+        let mut scores: BTreeMap<String, (f32, &'static str)> = BTreeMap::new();
+        for (score, address) in top {
+            let document: TantivyDocument = searcher.doc(address)?;
+            let id = document
+                .get_first(f.id)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_owned();
+            scores.insert(id, (score, "search"));
+        }
+        let direct: Vec<(String, f32)> =
+            scores.iter().map(|(id, (s, _))| (id.clone(), *s)).collect();
+        for (id, score) in direct {
+            let page = PageId::new(&id).map_err(IndexError::Store)?;
+            let neighbours = self
+                .graph
+                .outgoing(&page)
+                .iter()
+                .filter_map(|l| l.target.clone());
+            for neighbour in neighbours.chain(self.graph.backlinks(&page)) {
+                if !self.graph.pages.contains_key(&neighbour) {
+                    continue;
+                }
+                let linked = score * LINK_DECAY;
+                let entry = scores.entry(neighbour).or_insert((linked, "link"));
+                if entry.0 < linked {
+                    *entry = (linked, "link");
+                }
+            }
+        }
+        let mut related: Vec<Related> = scores
+            .into_iter()
+            .map(|(id, (score, via))| {
+                let title = self
+                    .graph
+                    .pages
+                    .get(&id)
+                    .map(|n| n.title.clone())
+                    .unwrap_or_default();
+                Related {
+                    id,
+                    title,
+                    score,
+                    via: via.to_owned(),
+                }
+            })
+            .collect();
+        related.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.id.cmp(&b.id)));
+        related.truncate(k);
+        Ok(related)
     }
 
     pub fn graph(&self) -> &Graph {

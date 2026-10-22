@@ -14,6 +14,7 @@ from edda.models import (
     Page,
     PageSummary,
     Proposal,
+    Related,
     SearchHit,
     Source,
     SourceSummary,
@@ -28,6 +29,7 @@ _entries = TypeAdapter(list[JournalEntry])
 _sources = TypeAdapter(list[SourceSummary])
 _proposals = TypeAdapter(list[Proposal])
 _edits = TypeAdapter(list[TextEdit])
+_related = TypeAdapter(list[Related])
 
 
 class Kernel:
@@ -54,6 +56,10 @@ class Kernel:
     def search(self, query: str, k: int = 10) -> list[SearchHit]:
         """The ``k`` best pages for ``query``, best first."""
         return _hits.validate_json(self._kernel.search(query, k))
+
+    def related(self, text: str, k: int = 10) -> list[Related]:
+        """Pages related to ``text``, best first: BM25 matches, then the pages they link to or are linked from."""
+        return _related.validate_json(self._kernel.related(text, k))
 
     def read_page(self, page_id: str, link_prefix: str = "/page/") -> Page:
         """A page with its HTML; links to other pages are rewritten to start with ``link_prefix``."""

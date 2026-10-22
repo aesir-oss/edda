@@ -200,6 +200,12 @@ impl Kernel {
         py.detach(|| self.with_index(|index| to_json(&index.search(query, k).map_err(index_err)?)))
     }
 
+    /// Pages related to a text, such as a new source, best first: BM25 matches, then their link neighbours.
+    #[pyo3(signature = (text, k = 10))]
+    fn related(&self, py: Python<'_>, text: &str, k: usize) -> PyResult<String> {
+        py.detach(|| self.with_index(|index| to_json(&index.related(text, k).map_err(index_err)?)))
+    }
+
     /// `read_page(id)`: frontmatter, body, rendered HTML, revision and citations.
     #[pyo3(signature = (id, link_prefix = "/page/"))]
     fn read_page(&self, py: Python<'_>, id: &str, link_prefix: &str) -> PyResult<String> {
