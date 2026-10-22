@@ -7,7 +7,7 @@ use std::sync::RwLock;
 
 use edda_index::{Index, IndexError};
 use edda_journal::{Journal, JournalError};
-use edda_store::{PageId, Resource, StoreError, Vault};
+use edda_store::{PageId, RawEntry, Resource, StoreError, Vault};
 use pyo3::create_exception;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -64,6 +64,23 @@ fn page_id(id: &str) -> PyResult<PageId> {
     PageId::new(id).map_err(store_err)
 }
 
+/// The full hash of the raw source a `resource` names: a unique `raw:` prefix, or a URL a source was fetched from.
+fn resolve_source(raw: &[RawEntry], index: &Index, resource: &Resource) -> Option<String> {
+    match resource {
+        Resource::Raw(prefix) => {
+            let prefix = prefix.to_ascii_lowercase();
+            let mut found = raw
+                .iter()
+                .filter(|e| !prefix.is_empty() && e.hash.starts_with(&prefix));
+            match (found.next(), found.next()) {
+                (Some(entry), None) => Some(entry.hash.clone()),
+                _ => None,
+            }
+        }
+        Resource::Url(url) => index.source_for_url(url).map(str::to_owned),
+    }
+}
+
 /// A vault opened for reading, with its index.
 #[pyclass(frozen)]
 struct Kernel {
@@ -106,21 +123,33 @@ impl Kernel {
     fn pages(&self, py: Python<'_>) -> PyResult<String> {
         py.detach(|| {
             let pages = self.vault.pages().map_err(store_err)?;
-            let summaries: Vec<Value> = pages
-                .iter()
-                .map(|p| {
-                    let fm = &p.frontmatter;
-                    json!({
-                        "id": p.id.as_str(),
-                        "title": p.title(),
-                        "description": fm.description,
-                        "type": fm.kind,
-                        "tags": fm.tags,
-                        "status": fm.status(),
+            let raw = self.vault.raw().list().map_err(store_err)?;
+            self.with_index(|index| {
+                let summaries: Vec<Value> = pages
+                    .iter()
+                    .map(|p| {
+                        let fm = &p.frontmatter;
+                        let mut sources: Vec<String> = fm
+                            .sources
+                            .iter()
+                            .filter_map(|s| resolve_source(&raw, index, &s.resource))
+                            .collect();
+                        sources.sort();
+                        sources.dedup();
+                        json!({
+                            "id": p.id.as_str(),
+                            "title": p.title(),
+                            "description": fm.description,
+                            "type": fm.kind,
+                            "tags": fm.tags,
+                            "status": fm.status(),
+                            "stale_after": fm.stale_after,
+                            "sources": sources,
+                        })
                     })
-                })
-                .collect();
-            to_json(&summaries)
+                    .collect();
+                to_json(&summaries)
+            })
         })
     }
 
@@ -138,17 +167,14 @@ impl Kernel {
             let page = self.vault.read_page(&id).map_err(store_err)?;
             let fm = &page.frontmatter;
             let analysis = page.analyze();
-            let raw = self.vault.raw();
+            let raw = self.vault.raw().list().map_err(store_err)?;
             let citations: Vec<Value> = self.with_index(|index| {
                 Ok(fm
                     .sources
                     .iter()
                     .map(|source| {
                         let label = source.id.clone().unwrap_or_default();
-                        let hash = match &source.resource {
-                            Resource::Raw(prefix) => raw.resolve(prefix).ok().map(|e| e.hash),
-                            Resource::Url(url) => index.source_for_url(url).map(str::to_owned),
-                        };
+                        let hash = resolve_source(&raw, index, &source.resource);
                         json!({
                             "id": label,
                             "resource": source.resource.to_string(),
@@ -210,6 +236,21 @@ impl Kernel {
                 "driver": meta.driver,
                 "text": text,
             }))
+        })
+    }
+
+    /// Every raw source: its hash, title, URL, when it was added and the driver that imported it.
+    fn sources(&self, py: Python<'_>) -> PyResult<String> {
+        py.detach(|| {
+            let raw = self.vault.raw().list().map_err(store_err)?;
+            let sources: Vec<Value> = raw
+                .iter()
+                .map(|e| {
+                    let m = &e.meta;
+                    json!({"hash": e.hash, "title": m.title, "url": m.url, "added": m.added, "driver": m.driver})
+                })
+                .collect();
+            to_json(&sources)
         })
     }
 

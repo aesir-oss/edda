@@ -1,10 +1,12 @@
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 from edda.api import create_app
+from edda.api.app import get_today
 from edda.api.openapi import main, schema_json
 
 pytestmark = pytest.mark.integration
@@ -43,3 +45,21 @@ def test_committed_schema_matches_the_api(tmp_path: Path) -> None:
     out = tmp_path / "openapi.json"
     assert main([str(out)]) == 0
     assert json.loads(out.read_text(encoding="utf-8"))["info"]["title"] == "Edda"
+
+
+def test_filters_the_example_vault_by_source_status_and_staleness(client: TestClient) -> None:
+    def ids(**params: str) -> list[str]:
+        return [p["id"] for p in client.get("/api/pages", params=params).json()]
+
+    assert ids(source="887e1bdc") == ["attention.md"]
+    assert ids(source="d9ca93c3") == ["attention.md", "papers/attention-is-all-you-need.md", "transformer.md"]
+    assert ids(status="draft") == ["bm25.md"]
+    assert ids(stale="true") == []
+    client.app.dependency_overrides[get_today] = lambda: date(2028, 1, 1)  # type: ignore[attr-defined]
+    assert ids(stale="true") == ["bm25.md"]
+    sources = client.get("/api/sources").json()
+    assert [s["title"] for s in sources] == [
+        "Reading notes: attention",
+        "BM25 in one page",
+        "Notes on Attention Is All You Need",
+    ]

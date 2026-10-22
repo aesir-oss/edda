@@ -140,6 +140,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sources */
+        get: operations["list_sources_api_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{source_hash}": {
         parameters: {
             query?: never;
@@ -301,13 +318,22 @@ export interface components {
         };
         /**
          * PageSummary
-         * @description A page as the Library lists it.
+         * @description A page as the Library lists it; ``sources`` are the hashes of the raw sources it cites.
          */
         PageSummary: {
             /** Description */
             description?: string | null;
             /** Id */
             id: string;
+            /** Sources */
+            sources?: string[];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+            /** Stale After */
+            stale_after?: string | null;
             /** Status */
             status: string;
             /** Tags */
@@ -346,6 +372,22 @@ export interface components {
             hash: string;
             /** Text */
             text: string;
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /**
+         * SourceSummary
+         * @description A raw source as the Library's source filter lists it.
+         */
+        SourceSummary: {
+            /** Added */
+            added?: string | null;
+            /** Driver */
+            driver?: string | null;
+            /** Hash */
+            hash: string;
             /** Title */
             title?: string | null;
             /** Url */
@@ -512,6 +554,12 @@ export interface operations {
                 tag?: string | null;
                 /** @description Only pages of this type */
                 type?: string | null;
+                /** @description Only pages citing this raw source (full hash or a prefix) */
+                source?: string | null;
+                /** @description Only pages with this status, such as draft */
+                status?: string | null;
+                /** @description Only pages past (or not past) stale_after */
+                stale?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -600,6 +648,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_sources_api_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSummary"][];
                 };
             };
         };

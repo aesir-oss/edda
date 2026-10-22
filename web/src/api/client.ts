@@ -7,6 +7,7 @@ export type SearchHit = Schemas['SearchHit']
 export type Links = Schemas['Links']
 export type VaultInfo = Schemas['VaultInfo']
 export type Citation = Schemas['Citation']
+export type SourceSummary = Schemas['SourceSummary']
 
 export class ApiError extends Error {
   readonly status: number
@@ -38,6 +39,7 @@ const pagePath = (id: string) => id.split('/').map(encodeURIComponent).join('/')
 export const api = {
   vault: () => get<VaultInfo>('/api/vault'),
   pages: (filter: { tag?: string; type?: string } = {}) => get<PageSummary[]>('/api/pages', filter),
+  sources: () => get<SourceSummary[]>('/api/sources'),
   page: (id: string) => get<Page>(`/api/pages/${pagePath(id)}`),
   links: (id: string) => get<Links>(`/api/links/${pagePath(id)}`),
   search: (q: string, k = 20) => get<SearchHit[]>('/api/search', { q, k }),

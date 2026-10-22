@@ -1,9 +1,23 @@
 import type { Page, PageSummary } from './api/client'
 
 export const pages: PageSummary[] = [
-  { id: 'attention.md', title: 'Attention mechanism', description: 'How weights work.', type: 'Concept', tags: ['ml'], status: 'stable' },
-  { id: 'bm25.md', title: 'BM25', description: null, type: 'Concept', tags: ['search'], status: 'draft' },
-  { id: 'papers/aiayn.md', title: 'Attention Is All You Need', type: null, status: 'stable' },
+  {
+    id: 'attention.md',
+    title: 'Attention mechanism',
+    description: 'How weights work.',
+    type: 'Concept',
+    tags: ['ml'],
+    status: 'stable',
+    stale: false,
+    sources: ['887e1bdc', 'd9ca93c3'],
+  },
+  { id: 'bm25.md', title: 'BM25', description: null, type: 'Concept', tags: ['search'], status: 'draft', stale: true, sources: ['d4d4516d'] },
+  { id: 'papers/aiayn.md', title: 'Attention Is All You Need', type: null, status: 'stable', stale: false },
+]
+
+export const sources = [
+  { hash: '887e1bdc', title: 'Reading notes', url: null, added: null, driver: 'markdown' },
+  { hash: 'd4d4516d', title: null, url: 'https://en.wikipedia.org/wiki/Okapi_BM25', added: null, driver: 'markdown' },
 ]
 
 export const attention: Page = {
