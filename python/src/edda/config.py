@@ -33,7 +33,7 @@ def _default_endpoints() -> dict[str, dict[str, Any]]:
         "local": {"base_url": "http://127.0.0.1:8080/v1", "model": "local"},
         "nvidia": {
             "base_url": "https://integrate.api.nvidia.com/v1",
-            "model": "nvidia/nemotron-3-super-120b-a12b",
+            "model": "nvidia/nemotron-3-ultra-550b-a55b",
             "api_key_env": "NVIDIA_API_KEY",
             "timeout_seconds": 300,
         },

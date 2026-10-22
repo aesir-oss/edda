@@ -116,6 +116,11 @@ class OpenAICompatibleProvider:
                     raise ProviderNotConfigured(
                         f"the {self.name} endpoint rejected the API key (HTTP {status})"
                     ) from exc
+                if status == 404 and self.config.api_key_env:
+                    raise ProviderNotConfigured(
+                        f"the {self.name} endpoint has no model {body['model']!r} for this account (HTTP 404); hosted "
+                        f"catalogs differ by account, so set another model under [llm.endpoints.{self.name}]"
+                    ) from exc
                 raise LLMError(f"{url}: HTTP {status}: {exc.response.text[:500]}") from exc
             except (httpx.TransportError, json.JSONDecodeError) as exc:
                 reason = repr(exc)

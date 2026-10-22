@@ -21,7 +21,7 @@ timeout_seconds = 600
 
 [llm.endpoints.nvidia]
 base_url = "https://integrate.api.nvidia.com/v1"
-model = "nvidia/nemotron-3-super-120b-a12b"
+model = "nvidia/nemotron-3-ultra-550b-a55b"   # or "nvidia/nemotron-3.5-lightning-30b-a3b": faster, smaller
 api_key_env = "NVIDIA_API_KEY"
 timeout_seconds = 300
 

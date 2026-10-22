@@ -268,7 +268,7 @@ def test_the_facade_creates_providers_lazily(monkeypatch: pytest.MonkeyPatch) ->
 
 NVIDIA = Endpoint(
     base_url="https://integrate.api.nvidia.com/v1",
-    model="nvidia/nemotron-3-super-120b-a12b",
+    model="nvidia/nemotron-3-ultra-550b-a55b",
     api_key_env="NVIDIA_API_KEY",
 )
 
@@ -286,7 +286,7 @@ def test_hosted_endpoints_send_the_key_from_the_environment() -> None:
     assert result.provider == "nvidia"
     assert seen[0].headers["authorization"] == "Bearer nvapi-test"
     assert str(seen[0].url) == "https://integrate.api.nvidia.com/v1/chat/completions"
-    assert json.loads(seen[0].content)["model"] == "nvidia/nemotron-3-super-120b-a12b"
+    assert json.loads(seen[0].content)["model"] == "nvidia/nemotron-3-ultra-550b-a55b"
 
 
 def test_hosted_endpoints_need_a_key_and_https() -> None:
@@ -318,7 +318,17 @@ def test_hosted_endpoints_do_not_blame_a_local_server(monkeypatch: pytest.Monkey
 
 def test_the_facade_routes_jobs_to_named_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     config = EddaConfig.model_validate({"llm": {"ingest": "nvidia"}})
-    assert LLM(config).provider_for("ingest") == ("nvidia", "nvidia/nemotron-3-super-120b-a12b")
+    assert LLM(config).provider_for("ingest") == ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b")
     monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
     with pytest.raises(ProviderNotConfigured, match="NVIDIA_API_KEY"):
         LLM(config).chat("ingest", "ingest:1", system="s", turns=[])
+
+
+def test_a_model_missing_from_a_hosted_account_says_so() -> None:
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404, text="Function not found")))
+    provider = OpenAICompatibleProvider("nvidia", NVIDIA, client=client, env={"NVIDIA_API_KEY": "k"}, retries=0)
+    with pytest.raises(ProviderNotConfigured, match="no model 'nvidia/x' for this account"):
+        provider.chat(model="nvidia/x", system="s", turns=[], tools=[], max_tokens=5)
+    local, _ = _local([httpx.Response(404, text="no such route")])
+    with pytest.raises(LLMError, match="HTTP 404: no such route"):
+        local.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)

@@ -63,7 +63,7 @@ from the environment, never from `edda.toml` or the vault.
 
 | Provider | Set a job to | Key | Model |
 |---|---|---|---|
-| NVIDIA (Nemotron) | `"nvidia"` | `NVIDIA_API_KEY`, from build.nvidia.com | `nvidia/nemotron-3-super-120b-a12b` |
+| NVIDIA (Nemotron) | `"nvidia"` | `NVIDIA_API_KEY`, from build.nvidia.com | `nvidia/nemotron-3-ultra-550b-a55b`; `nvidia/nemotron-3.5-lightning-30b-a3b` is faster. Which models an account can call varies |
 | Anthropic (Claude) | `"anthropic"` | `ANTHROPIC_API_KEY`, or `ant auth login` | Sonnet 5.5, Opus 5.5 or Haiku 5.5 per job |
 
 ```sh
