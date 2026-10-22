@@ -13,8 +13,12 @@ name = "_kernel"
 crate-type = ["cdylib"]
 
 [dependencies]
+edda-index.workspace = true
+edda-journal.workspace = true
 edda-store.workspace = true
 pyo3 = "0.30"
+serde.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

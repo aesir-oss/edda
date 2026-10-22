@@ -320,8 +320,12 @@ dependencies = [
 name = "edda-py"
 version = "0.1.0"
 dependencies = [
+ "edda-index",
+ "edda-journal",
  "edda-store",
  "pyo3",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
