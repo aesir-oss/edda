@@ -27,3 +27,13 @@ Everything runs through pixi: `pixi run test`, `lint`, `check`, `cov`, `ci`, `de
   unrelated packages with those names. `web/package.json` stays `"private": true`.
 - The web app is on TypeScript 5.9 because openapi-typescript does not accept 6 yet.
 - `cov-rust` excludes `edda-py`: cargo cannot test PyO3 code without an interpreter, so the Python suite covers it.
+
+## BMad Method
+
+- Installed from conda-forge into its own pixi environment: `pixi run -e bmad bmad-install` installs or updates
+  core, bmm, tea, bmb and cis for Claude Code (skills in `.claude/skills/`, modules in `_bmad/`, artifacts in
+  `_bmad-output/`). Both directories are installer-managed: change answers by re-running the task, or pin values in
+  `_bmad/custom/config.toml`.
+- BMad skills and scripts say `uv run <script>.py` or `uv run --with pytest ...`. Run them as
+  `pixi run -e bmad python <script>.py` (and `pixi run pytest ...` for their tests); never `uv`.
+- `_bmad/` and `.claude/skills/` are excluded from ruff and the whitespace hooks; they are BMad's files, not ours.

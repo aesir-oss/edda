@@ -108,7 +108,27 @@ python = "3.13.*"
 [feature.py312.dependencies]
 python = "3.12.*"
 
+[feature.bmad.dependencies]
+bmad-method = ">=6.12.4,<7"
+python = "3.14.*"
+"ruamel.yaml" = ">=0.19.1,<0.20"
+
+[feature.bmad.tasks]
+# BMad Method from conda-forge. tea, bmb and cis are external modules the installer fetches at their latest stable
+# tags. Re-running it updates the install and keeps earlier answers as defaults.
+bmad-install = { cmd = """
+bmad-method install -y \
+  --directory . \
+  --tools claude-code \
+  --modules bmm,tea,bmb,cis \
+  --channel stable \
+  --output-folder _bmad-output \
+  --set tea.ci_platform=github-actions \
+  --set tea.test_stack_type=fullstack
+""", description = "install or update BMad Method (core, bmm, tea, bmb, cis) for Claude Code" }
+
 [environments]
 default = ["py314", "dev"]
 py313 = ["py313", "dev"]
 py312 = ["py312", "dev"]
+bmad = { features = ["bmad"], no-default-feature = true }
