@@ -31,13 +31,14 @@ Serves the API on <http://127.0.0.1:8000> (OpenAPI at `/docs`) and the app on <h
 `examples/vault`. The app has two views: the Library (browse, filter by tag, search) and a Page view (the rendered
 page, citations on hover, its sources and backlinks).
 
-Set `EDDA_VAULT` to browse another vault. When port 8000 is taken, run the API on another port and point the dev
-server's proxy at it with `EDDA_API`:
+Set `EDDA_VAULT` to browse another vault. The ports are uvicorn's and Vite's defaults; when either is taken, pass
+others, API first:
 
 ```sh
-EDDA_VAULT=$PWD/examples/vault pixi run uvicorn edda.api.app:create_app --factory --port 8765
-EDDA_API=http://127.0.0.1:8765 pixi run npm --prefix web run dev
+pixi run dev 8765 5199
 ```
+
+The web dev server proxies `/api` to whichever API port you give, and fails rather than moving to another port.
 
 The search index and link graph in `<vault>/.edda/index` are rebuilt from the files whenever they change, so
 deleting them loses nothing.

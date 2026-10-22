@@ -103,8 +103,12 @@ changelog = "git cliff -o CHANGELOG.md"
 pre-commit-run = "pre-commit run --all-files"
 ci = { depends-on = ["pre-commit-run", "build", "check", "lint", "api-drift", "cov"] }
 
-# The API on :8000 and the Vite dev server on :5173, which proxies /api to it. EDDA_VAULT picks the vault.
-dev = { cmd = "uvicorn edda.api.app:create_app --factory --reload --port 8000 & npm --prefix web run dev", depends-on = [
+# The API on :8000 (uvicorn's default) and the Vite dev server on :5173 (Vite's), which proxies /api to the API.
+# Both are arguments: `pixi run dev 8765 5199`. EDDA_VAULT picks the vault.
+dev = { args = [
+  { arg = "api_port", default = "8000" },
+  { arg = "web_port", default = "5173" },
+], cmd = "uvicorn edda.api.app:create_app --factory --reload --port {{ api_port }} & EDDA_API=http://127.0.0.1:{{ api_port }} npm --prefix web run dev -- --port {{ web_port }} --strictPort", depends-on = [
   "native",
   "web-install",
 ], env = { EDDA_VAULT = "$PIXI_PROJECT_ROOT/examples/vault" } }
