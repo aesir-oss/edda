@@ -1,0 +1,6 @@
+Notes on "Attention Is All You Need" (Vaswani et al., 2017), arXiv 1706.03762.
+
+Section 3: the model is an encoder and a decoder, each a stack of six identical layers.
+Section 3.2: attention is scaled dot-product attention; several heads run in parallel.
+Section 3.5: positions are added to the inputs with fixed sine and cosine encodings, since the model has no recurrence.
+Section 6: on WMT 2014 English-German translation it beat earlier models while training in less time.

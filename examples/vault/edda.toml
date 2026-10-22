@@ -1,0 +1,3 @@
+[vault]
+title = "Edda example vault"
+types = ["Concept", "Paper", "Person", "Project"]

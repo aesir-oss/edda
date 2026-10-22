@@ -37,3 +37,11 @@ Everything runs through pixi: `pixi run test`, `lint`, `check`, `cov`, `ci`, `de
 - BMad skills and scripts say `uv run <script>.py` or `uv run --with pytest ...`. Run them as
   `pixi run -e bmad python <script>.py` (and `pixi run pytest ...` for their tests); never `uv`.
 - `_bmad/` and `.claude/skills/` are excluded from ruff and the whitespace hooks; they are BMad's files, not ours.
+
+## The example vault
+
+- `examples/vault/raw/` files are named by the SHA-256 of their bytes and never edited; the whitespace hooks skip
+  them so a fixer cannot change a byte. Add a source by hashing it (`shasum -a 256`) and writing its `.meta.toml`.
+- `wiki/index.md` and `wiki/log.md` are generated:
+  `EDDA_WRITE_EXAMPLES=1 pixi run cargo test -p edda-store --test example_vault` rewrites them, and the same test
+  fails when they are stale.
