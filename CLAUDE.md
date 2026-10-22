@@ -9,6 +9,8 @@ browsing, and nothing in M1 calls an LLM.
 | Path | What it is |
 |---|---|
 | `crates/edda-store/` | Reads and writes the vault: `raw/` content-addressed by SHA-256, `wiki/` as the OKF v0.2 bundle. The only code that knows the page format |
+| `crates/edda-journal/` | Append-only JSONL journal, each entry hash-chained to the last; verify, per-page history, `log.md` entries |
+| `crates/edda-index/` | tantivy BM25 search and the link graph in `.edda/index/`, rebuilt from the files whenever they change |
 | `crates/edda-py/` | PyO3 bindings, built by maturin into `edda._kernel`; a thin layer, tested from Python |
 | `python/src/edda/` | The Python package, installed editable by pixi |
 | `web/` | Vite + React + TypeScript shell |
