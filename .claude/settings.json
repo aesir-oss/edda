@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/stop-ci.sh",
+            "timeout": 1800,
+            "statusMessage": "Running the change harness gate (pixi run ci)"
+          }
+        ]
+      }
+    ]
+  }
+}

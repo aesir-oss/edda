@@ -1,0 +1,77 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "edda"
+description = "A Knowledge OS: an LLM-maintained wiki of linked, cited Markdown pages."
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dynamic = ["version"]
+classifiers = ["Private :: Do Not Upload"]
+
+[tool.maturin]
+manifest-path = "crates/edda-py/Cargo.toml"
+python-source = "python/src"
+module-name = "edda._kernel"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "integration: marks tests as integration tests requiring real I/O, network, or DB",
+]
+
+[tool.coverage.run]
+source = ["edda"]
+
+[tool.ruff]
+line-length = 120
+src = ["python/src", "tests"]
+extend-exclude = ["web", "target"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF", "D"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+known-first-party = ["edda"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+files = ["python/src", "tests"]
+mypy_path = "python/src"
+
+[tool.git-cliff.changelog]
+header = "# Changelog\n\n"
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}]({{ commit.id }}))
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[tool.git-cliff.git]
+conventional_commits = true
+filter_unconventional = true
+commit_parsers = [
+    { message = "^feat", group = "Features" },
+    { message = "^fix", group = "Bug Fixes" },
+    { message = "^doc", group = "Documentation" },
+    { message = "^perf", group = "Performance" },
+    { message = "^refactor", group = "Refactoring" },
+    { message = "^chore", skip = true },
+]

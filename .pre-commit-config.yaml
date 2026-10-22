@@ -1,0 +1,54 @@
+# Language hooks run the project's own tools through pixi, so they see the same versions, the built native module and
+# the installed packages that `pixi run check` and `pixi run lint` do.
+repos:
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts)$
+      - id: trailing-whitespace
+        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts)$
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: pixi run ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: ruff-format
+        entry: pixi run ruff format
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: pixi run check-py
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: rustfmt
+        name: rustfmt
+        entry: pixi run cargo fmt --all --
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: clippy
+        name: clippy
+        entry: pixi run lint-rust
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: eslint
+        name: eslint
+        entry: pixi run lint-web
+        language: system
+        files: ^web/.*\.(ts|tsx|js)$
+        pass_filenames: false

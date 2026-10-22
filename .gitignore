@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.coverage
+coverage.xml
+
+# The native module maturin builds into the source tree
+python/src/edda/_kernel*.so
+python/src/edda/_kernel*.pyd
+
+# Rust
+target/
+
+# Pixi
+.pixi/*
+!.pixi/config.toml
+
+# Environment
+.env
+.env.*
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# A vault's rebuildable index
+.edda/
+
+# Local Claude overrides — never commit
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Triage reports — never commit
+triage-*.md

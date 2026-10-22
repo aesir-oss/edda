@@ -1,0 +1,20 @@
+[package]
+name = "edda-py"
+description = "PyO3 bindings exposing Edda's system calls as the edda._kernel module."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+name = "_kernel"
+crate-type = ["cdylib"]
+
+[dependencies]
+edda-store.workspace = true
+pyo3 = "0.30"
+
+[lints]
+workspace = true

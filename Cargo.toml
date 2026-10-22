@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+# Edda is deployed from this repository and never published. crates.io has unrelated `edda`, `edda-core` and
+# `edda-store` crates, so every crate sets `publish.workspace = true` and siblings are depended on by path only.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "Apache-2.0"
+repository = "https://github.com/aesir-oss/edda"
+publish = false
+
+[workspace.dependencies]
+edda-store = { path = "crates/edda-store" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

@@ -1,0 +1,112 @@
+[workspace]
+authors = ["Kevin Mills <millsks@gmail.com>"]
+channels = ["conda-forge"]
+name = "edda"
+platforms = ["osx-arm64", "linux-64"]
+version = "0.1.0"
+
+[dependencies]
+rust = ">=1.90"
+python = ">=3.12,<3.15"
+nodejs = ">=22"
+maturin = ">=1.15.0,<2"
+fastapi = ">=0.156.4,<0.157"
+uvicorn = ">=0.54.0,<0.55"
+structlog = ">=26.1.0,<27"
+pydantic = ">=2.14.1,<3"
+
+# The Python package and its native module (crates/edda-py) are built from this repository by maturin, never
+# resolved from PyPI: an unrelated `edda` exists there.
+[pypi-dependencies]
+edda = { path = ".", editable = true }
+
+[pypi-options]
+no-build-isolation = ["edda"]
+
+[tasks]
+# `pixi install` builds the native module once; this rebuilds it in place after a Rust change.
+native = { cmd = "maturin develop --skip-install", inputs = [
+  "Cargo.toml",
+  "Cargo.lock",
+  "crates/**/*.rs",
+  "crates/**/Cargo.toml",
+] }
+web-install = { cmd = "npm ci --no-audit --no-fund", cwd = "web", inputs = [
+  "web/package.json",
+  "web/package-lock.json",
+], outputs = [
+  "web/node_modules/.package-lock.json",
+] }
+
+[feature.dev.dependencies]
+pytest = "*"
+pytest-cov = "*"
+mypy = "*"
+ruff = "*"
+httpx = "*"
+pre-commit = "*"
+cargo-llvm-cov = "*"
+git-cliff = "*"
+pre-commit-hooks = ">=6.0.0,<7"
+
+[feature.dev.tasks]
+bootstrap = { cmd = "pre-commit install --hook-type pre-commit --hook-type commit-msg", depends-on = [
+  "web-install",
+] }
+
+fmt-rust = "cargo fmt --all"
+fmt-py = "ruff format ."
+fmt-web = { cmd = "npm run fmt", cwd = "web", depends-on = ["web-install"] }
+fmt = { depends-on = ["fmt-rust", "fmt-py", "fmt-web"] }
+
+lint-rust = "cargo clippy --workspace --all-targets -- -D warnings"
+lint-py = "ruff check ."
+lint-web = { cmd = "npm run lint", cwd = "web", depends-on = ["web-install"] }
+lint = { depends-on = ["lint-rust", "lint-py", "lint-web"] }
+
+check-py = { cmd = "mypy", depends-on = ["native"] }
+check-web = { cmd = "npm run typecheck", cwd = "web", depends-on = ["web-install"] }
+check = { depends-on = ["check-py", "check-web"] }
+
+test-rust = "cargo test --workspace --exclude edda-py"
+test-py = { cmd = "pytest tests/unit", depends-on = ["native"] }
+test-web = { cmd = "npm test", cwd = "web", depends-on = ["web-install"] }
+test = { depends-on = ["test-rust", "test-py", "test-web"] }
+test-integration = { cmd = "pytest tests/integration", depends-on = ["native"] }
+
+# edda-py is a thin PyO3 layer that cargo cannot test without an interpreter; the Python suite covers it.
+cov-rust = "cargo llvm-cov --workspace --exclude edda-py --all-targets --fail-under-lines 90"
+cov-py = { cmd = "pytest tests --cov=edda --cov-report=term-missing --cov-fail-under=90", depends-on = [
+  "native",
+] }
+cov-web = { cmd = "npm run cov", cwd = "web", depends-on = ["web-install"] }
+cov = { depends-on = ["cov-rust", "cov-py", "cov-web"] }
+
+build-rust = "cargo build --workspace"
+build-py = "maturin build --release --out dist"
+build-web = { cmd = "npm run build", cwd = "web", depends-on = ["web-install"] }
+build = { depends-on = ["build-rust", "build-py", "build-web"] }
+
+changelog = "git cliff -o CHANGELOG.md"
+pre-commit-run = "pre-commit run --all-files"
+ci = { depends-on = ["pre-commit-run", "build", "check", "lint", "cov"] }
+
+# The API on :8000 and the Vite dev server on :5173, which proxies /api to it. EDDA_VAULT picks the vault.
+dev = { cmd = "uvicorn edda.api.app:create_app --factory --reload --port 8000 & npm --prefix web run dev", depends-on = [
+  "native",
+  "web-install",
+], env = { EDDA_VAULT = "$PIXI_PROJECT_ROOT/examples/vault" } }
+
+[feature.py314.dependencies]
+python = "3.14.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+
+[feature.py312.dependencies]
+python = "3.12.*"
+
+[environments]
+default = ["py314", "dev"]
+py313 = ["py313", "dev"]
+py312 = ["py312", "dev"]
