@@ -9,9 +9,10 @@ and read-only browsing, and nothing in it calls an LLM.
 
 | Path | What it is |
 |---|---|
-| `crates/edda-store/` | Reads and writes the vault: `raw/` content-addressed by SHA-256, `wiki/` as the OKF v0.2 bundle. The only code that knows the page format |
+| `crates/edda-store/` | Reads and writes the vault: `raw/` content-addressed by SHA-256, `wiki/` as the OKF v0.2 bundle, and proposals (`propose_edit`, `propose_page`, `cite`, `flag`) in `proposals/`. The only code that knows the page format |
 | `crates/edda-journal/` | Append-only JSONL journal, each entry hash-chained to the last; verify, per-page history, `log.md` entries |
 | `crates/edda-index/` | tantivy BM25 search and the link graph in `.edda/index/`, rebuilt from the files whenever they change |
+| `crates/edda-kernel/` | The syscall gate: accepts or rejects proposals; the only code that writes pages, and it journals every change with the page as written |
 | `crates/edda-py/` | PyO3 bindings, built by maturin into `edda._kernel`; a thin layer, tested from Python |
 | `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `api` (read-only FastAPI), `log` (structlog) |
 | `web/` | Vite + React + TypeScript shell |

@@ -67,6 +67,16 @@ fn journal_err(e: JournalError) -> PyErr {
     KernelError::new_err(e.to_string())
 }
 
+fn gate_err(e: edda_kernel::KernelError) -> PyErr {
+    match e {
+        edda_kernel::KernelError::Store(e) => store_err(e),
+        edda_kernel::KernelError::Journal(e) => journal_err(e),
+        blocked @ edda_kernel::KernelError::Blocked { .. } => {
+            InvalidRequestError::new_err(blocked.to_string())
+        }
+    }
+}
+
 fn to_json(value: &impl Serialize) -> PyResult<String> {
     serde_json::to_string(value).map_err(|e| KernelError::new_err(e.to_string()))
 }
@@ -388,6 +398,32 @@ impl Kernel {
             note: note.to_owned(),
         };
         py.detach(|| self.proposal_json(&self.vault.propose(job, change, note).map_err(store_err)?))
+    }
+
+    /// Accepts a pending proposal on behalf of `by` and applies it, then refreshes the index. Returns the journal entry.
+    #[pyo3(signature = (proposal, by = "owner"))]
+    fn accept(&self, py: Python<'_>, proposal: &str, by: &str) -> PyResult<String> {
+        py.detach(|| {
+            let outcome = edda_kernel::accept(&self.vault, proposal, by).map_err(gate_err)?;
+            let fresh = Index::open(&self.vault).map_err(index_err)?;
+            *self
+                .index
+                .write()
+                .map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
+            to_json(&outcome.entry)
+        })
+    }
+
+    /// Rejects a pending proposal; the page is untouched. Returns the journal entry.
+    #[pyo3(signature = (proposal, reason, by = "owner"))]
+    fn reject(&self, py: Python<'_>, proposal: &str, reason: &str, by: &str) -> PyResult<String> {
+        py.detach(|| {
+            to_json(
+                &edda_kernel::reject(&self.vault, proposal, by, reason)
+                    .map_err(gate_err)?
+                    .entry,
+            )
+        })
     }
 
     /// Every proposal with its preview, oldest first.

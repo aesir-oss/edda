@@ -113,6 +113,19 @@ class Kernel:
         """``flag``: report a contradiction, outdated claim or gap on a page, for review."""
         return Proposal.model_validate_json(self._kernel.flag(job, page_id, kind, note))
 
+    def accept(self, proposal_id: str, by: str = "owner") -> JournalEntry:
+        """Accepts a pending proposal on behalf of ``by`` and applies it; returns the journal entry it wrote.
+
+        Raises:
+            ConflictError: The page changed since the proposal's base revision.
+            InvalidRequestError: The proposal is not pending, or breaks a kernel rule (such as uncited text).
+        """
+        return JournalEntry.model_validate_json(self._kernel.accept(proposal_id, by))
+
+    def reject(self, proposal_id: str, reason: str, by: str = "owner") -> JournalEntry:
+        """Rejects a pending proposal; the page is untouched. Returns the journal entry it wrote."""
+        return JournalEntry.model_validate_json(self._kernel.reject(proposal_id, reason, by))
+
     def proposals(self) -> list[Proposal]:
         """Every proposal with its preview, oldest first."""
         return _proposals.validate_json(self._kernel.proposals())

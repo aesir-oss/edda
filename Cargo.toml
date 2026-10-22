@@ -15,6 +15,7 @@ publish = false
 [workspace.dependencies]
 edda-index = { path = "crates/edda-index" }
 edda-journal = { path = "crates/edda-journal" }
+edda-kernel = { path = "crates/edda-kernel" }
 edda-store = { path = "crates/edda-store" }
 
 hex = "0.4.3"

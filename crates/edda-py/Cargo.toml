@@ -15,6 +15,7 @@ crate-type = ["cdylib"]
 [dependencies]
 edda-index.workspace = true
 edda-journal.workspace = true
+edda-kernel.workspace = true
 edda-store.workspace = true
 pyo3 = "0.30"
 serde.workspace = true
