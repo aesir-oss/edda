@@ -5,7 +5,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: { '/api': 'http://127.0.0.1:8000' },
+    proxy: { '/api': process.env.EDDA_API ?? 'http://127.0.0.1:8000' },
   },
   test: {
     environment: 'jsdom',
@@ -13,7 +13,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/main.tsx', 'src/test-setup.ts', 'src/**/*.test.{ts,tsx}', 'src/**/*.d.ts'],
+      exclude: ['src/main.tsx', 'src/test-setup.ts', 'src/test-utils.tsx', 'src/fixtures.ts', 'src/**/*.test.{ts,tsx}', 'src/**/*.d.ts'],
       thresholds: { lines: 90, functions: 90, branches: 90, statements: 90 },
     },
   },
