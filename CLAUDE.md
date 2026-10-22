@@ -38,6 +38,12 @@ After changing an API route or model, `pixi run gen-api` rewrites `web/openapi.j
 - The web app is on TypeScript 5.9 because openapi-typescript does not accept 6 yet.
 - `cov-rust` excludes `edda-py`: cargo cannot test PyO3 code without an interpreter, so the Python suite covers it.
 
+## Changelog
+
+`CHANGELOG.md` is generated: run `pixi run changelog` (git-cliff, configured in `pyproject.toml`) on an up-to-date `main` and
+commit the result; fix the template, never the file. CI does not check it, because a pull request's own squash commit
+only exists after it merges.
+
 ## BMad Method
 
 - Installed from conda-forge into its own pixi environment: `pixi run -e bmad bmad-install` installs or updates
