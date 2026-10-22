@@ -2,13 +2,29 @@
 title = "Edda example vault"
 types = ["Concept", "Paper", "Person", "Project"]
 
-# The Claude model each job uses.
-[models]
+# Which model provider each job uses. "local" is the default: a model server on this machine (llama.cpp's
+# llama-server, Ollama, mlx-lm ...), free, and nothing leaves the machine. "anthropic" uses Claude and needs your own
+# API key in the environment (ANTHROPIC_API_KEY); you pay for it. The key never goes in this file.
+[llm]
+ingest = "local"
+query = "local"
+lint = "local"
+research = "local"
+summary = "local"
+
+[llm.local]
+base_url = "http://127.0.0.1:8080/v1"
+model = "local"
+timeout_seconds = 600
+
+# The Claude model each job uses when it is set to "anthropic".
+[llm.anthropic]
 ingest = "claude-sonnet-5-5"
 query = "claude-sonnet-5-5"
 lint = "claude-opus-5-5"
 research = "claude-opus-5-5"
 summary = "claude-haiku-5-5"
+fallbacks = true
 
 # Tokens of context each job may pack into a prompt, and the longest reply it may ask for.
 [budgets]

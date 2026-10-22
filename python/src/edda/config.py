@@ -6,7 +6,7 @@ never breaks a vault; an unknown key is an error, so a typo does not silently fa
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError
 
@@ -15,14 +15,39 @@ class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class Models(_Section):
-    """The Claude model each job uses."""
+class LocalLLM(_Section):
+    """A local model server with an OpenAI-compatible chat-completions API (llama.cpp's llama-server by default)."""
+
+    base_url: str = "http://127.0.0.1:8080/v1"
+    model: str = "local"
+    timeout_seconds: PositiveInt = 600
+
+
+class AnthropicLLM(_Section):
+    """The Claude model each job uses when it is set to Anthropic. The API key comes from the environment, never here."""
 
     ingest: str = "claude-sonnet-5-5"
     query: str = "claude-sonnet-5-5"
     lint: str = "claude-opus-5-5"
     research: str = "claude-opus-5-5"
     summary: str = "claude-haiku-5-5"
+    fallbacks: bool = True
+
+
+class LLMConfig(_Section):
+    """Which provider each job uses.
+
+    ``local`` is the default: free, and nothing leaves the machine. ``anthropic`` needs the person's own API key, and
+    they pay for it.
+    """
+
+    ingest: Literal["local", "anthropic"] = "local"
+    query: Literal["local", "anthropic"] = "local"
+    lint: Literal["local", "anthropic"] = "local"
+    research: Literal["local", "anthropic"] = "local"
+    summary: Literal["local", "anthropic"] = "local"
+    local: LocalLLM = Field(default_factory=LocalLLM)
+    anthropic: AnthropicLLM = Field(default_factory=AnthropicLLM)
 
 
 class Budgets(_Section):
@@ -60,7 +85,7 @@ class EddaConfig(_Section):
     """Everything in ``edda.toml`` outside ``[vault]``."""
 
     vault: dict[str, Any] = Field(default_factory=dict)
-    models: Models = Field(default_factory=Models)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
     budgets: Budgets = Field(default_factory=Budgets)
     drivers: Drivers = Field(default_factory=Drivers)
 
