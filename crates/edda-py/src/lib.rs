@@ -7,7 +7,7 @@ use std::sync::RwLock;
 
 use edda_index::{Index, IndexError};
 use edda_journal::{Journal, JournalError};
-use edda_store::{PageId, RawEntry, Resource, StoreError, Vault};
+use edda_store::{Change, PageId, Proposal, RawEntry, Resource, StoreError, TextEdit, Vault};
 use pyo3::create_exception;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -32,15 +32,26 @@ create_exception!(
     KernelError,
     "The page id or source hash is not valid."
 );
+create_exception!(
+    _kernel,
+    ConflictError,
+    InvalidRequestError,
+    "The page changed since the proposal's base revision."
+);
 
 fn store_err(e: StoreError) -> PyErr {
     match e {
-        StoreError::PageNotFound(_) | StoreError::SourceNotFound(_) => {
-            NotFoundError::new_err(e.to_string())
-        }
+        StoreError::PageNotFound(_)
+        | StoreError::SourceNotFound(_)
+        | StoreError::ProposalNotFound(_) => NotFoundError::new_err(e.to_string()),
+        StoreError::Conflict { .. } => ConflictError::new_err(e.to_string()),
         StoreError::InvalidPageId { .. }
         | StoreError::InvalidHash(_)
-        | StoreError::AmbiguousSource { .. } => InvalidRequestError::new_err(e.to_string()),
+        | StoreError::AmbiguousSource { .. }
+        | StoreError::EditDoesNotApply { .. }
+        | StoreError::PageExists(_)
+        | StoreError::ClaimNotFound(_)
+        | StoreError::NotPending(_) => InvalidRequestError::new_err(e.to_string()),
         other => KernelError::new_err(other.to_string()),
     }
 }
@@ -89,6 +100,21 @@ struct Kernel {
 }
 
 impl Kernel {
+    fn proposal_view(&self, proposal: &Proposal) -> PyResult<Value> {
+        let mut view =
+            serde_json::to_value(proposal).map_err(|e| KernelError::new_err(e.to_string()))?;
+        let (diff, issues) = match self.vault.preview(proposal) {
+            Ok(preview) => (preview.diff, preview.issues),
+            Err(e) => (String::new(), vec![e.to_string()]),
+        };
+        view["preview"] = json!({"diff": diff, "issues": issues});
+        Ok(view)
+    }
+
+    fn proposal_json(&self, proposal: &Proposal) -> PyResult<String> {
+        to_json(&self.proposal_view(proposal)?)
+    }
+
     fn with_index<T>(&self, f: impl FnOnce(&Index) -> PyResult<T>) -> PyResult<T> {
         let index = self
             .index
@@ -265,6 +291,119 @@ impl Kernel {
         })
     }
 
+    /// `propose_edit(page, base_rev, edits, rationale)`: text edits to a page; `edits_json` is a list of
+    /// `{"old": ..., "new": ...}`.
+    #[pyo3(signature = (job, page, base_rev, edits_json, rationale))]
+    fn propose_edit(
+        &self,
+        py: Python<'_>,
+        job: &str,
+        page: &str,
+        base_rev: u64,
+        edits_json: &str,
+        rationale: &str,
+    ) -> PyResult<String> {
+        let edits: Vec<TextEdit> = serde_json::from_str(edits_json)
+            .map_err(|e| InvalidRequestError::new_err(format!("edits: {e}")))?;
+        let change = Change::Edit {
+            page: page.to_owned(),
+            base_rev,
+            edits,
+        };
+        py.detach(|| {
+            self.proposal_json(
+                &self
+                    .vault
+                    .propose(job, change, rationale)
+                    .map_err(store_err)?,
+            )
+        })
+    }
+
+    /// `propose_page(title, body, rationale)`: a new page, created as a draft.
+    #[pyo3(signature = (job, page, kind, title, description, tags, body, rationale))]
+    #[allow(clippy::too_many_arguments)]
+    fn propose_page(
+        &self,
+        py: Python<'_>,
+        job: &str,
+        page: &str,
+        kind: &str,
+        title: &str,
+        description: &str,
+        tags: Vec<String>,
+        body: &str,
+        rationale: &str,
+    ) -> PyResult<String> {
+        let change = Change::NewPage {
+            page: page.to_owned(),
+            kind: kind.to_owned(),
+            title: title.to_owned(),
+            description: description.to_owned(),
+            tags,
+            body: body.to_owned(),
+        };
+        py.detach(|| {
+            self.proposal_json(
+                &self
+                    .vault
+                    .propose(job, change, rationale)
+                    .map_err(store_err)?,
+            )
+        })
+    }
+
+    /// `cite(proposal, claim, source_span)`: back a claim in a proposal's added text with a span of a raw source.
+    #[pyo3(signature = (proposal, claim, source, locator, source_id = None))]
+    fn cite(
+        &self,
+        py: Python<'_>,
+        proposal: &str,
+        claim: &str,
+        source: &str,
+        locator: &str,
+        source_id: Option<&str>,
+    ) -> PyResult<String> {
+        py.detach(|| {
+            let cited = self
+                .vault
+                .cite(proposal, claim, source, locator, source_id)
+                .map_err(store_err)?;
+            self.proposal_json(&cited)
+        })
+    }
+
+    /// `flag(page, kind, note)`: a contradiction, outdated claim or gap, for review.
+    fn flag(
+        &self,
+        py: Python<'_>,
+        job: &str,
+        page: &str,
+        kind: &str,
+        note: &str,
+    ) -> PyResult<String> {
+        let change = Change::Flag {
+            page: page.to_owned(),
+            flag: kind.to_owned(),
+            note: note.to_owned(),
+        };
+        py.detach(|| self.proposal_json(&self.vault.propose(job, change, note).map_err(store_err)?))
+    }
+
+    /// Every proposal with its preview, oldest first.
+    fn proposals(&self, py: Python<'_>) -> PyResult<String> {
+        py.detach(|| {
+            let all = self.vault.proposals().map_err(store_err)?;
+            let views: PyResult<Vec<Value>> = all.iter().map(|p| self.proposal_view(p)).collect();
+            to_json(&views?)
+        })
+    }
+
+    /// One proposal with its preview: the diff and the rules the result breaks.
+    fn proposal(&self, py: Python<'_>, id: &str) -> PyResult<String> {
+        py.detach(|| self.proposal_json(&self.vault.proposal(id).map_err(store_err)?))
+    }
+
     /// Orphan pages and broken links across the vault.
     fn graph_issues(&self, py: Python<'_>) -> PyResult<String> {
         py.detach(|| {
@@ -329,5 +468,6 @@ fn _kernel(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("KernelError", py.get_type::<KernelError>())?;
     m.add("NotFoundError", py.get_type::<NotFoundError>())?;
     m.add("InvalidRequestError", py.get_type::<InvalidRequestError>())?;
+    m.add("ConflictError", py.get_type::<ConflictError>())?;
     Ok(())
 }

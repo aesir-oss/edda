@@ -25,6 +25,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 serde_yaml_ng = "0.10.0"
 sha2 = "0.11.1"
+similar = "3.2"
 tantivy = { version = "0.27", default-features = false, features = ["mmap", "stopwords", "lz4-compression", "stemmer"] }
 tempfile = "3.27"
 thiserror = "2.0.21"

@@ -5,15 +5,28 @@ from pathlib import Path
 from pydantic import TypeAdapter
 
 from edda import _kernel
-from edda._kernel import InvalidRequestError, KernelError, NotFoundError
-from edda.models import GraphIssues, JournalEntry, Links, Page, PageSummary, SearchHit, Source, SourceSummary
+from edda._kernel import ConflictError, InvalidRequestError, KernelError, NotFoundError
+from edda.models import (
+    GraphIssues,
+    JournalEntry,
+    Links,
+    Page,
+    PageSummary,
+    Proposal,
+    SearchHit,
+    Source,
+    SourceSummary,
+    TextEdit,
+)
 
-__all__ = ["InvalidRequestError", "Kernel", "KernelError", "NotFoundError"]
+__all__ = ["ConflictError", "InvalidRequestError", "Kernel", "KernelError", "NotFoundError"]
 
 _summaries = TypeAdapter(list[PageSummary])
 _hits = TypeAdapter(list[SearchHit])
 _entries = TypeAdapter(list[JournalEntry])
 _sources = TypeAdapter(list[SourceSummary])
+_proposals = TypeAdapter(list[Proposal])
+_edits = TypeAdapter(list[TextEdit])
 
 
 class Kernel:
@@ -56,6 +69,57 @@ class Kernel:
     def links(self, page_id: str) -> Links:
         """A page's outgoing links and backlinks."""
         return Links.model_validate_json(self._kernel.links(page_id))
+
+    def propose_edit(self, job: str, page_id: str, base_rev: int, edits: list[TextEdit], rationale: str) -> Proposal:
+        """``propose_edit``: text edits to a page, made against its revision ``base_rev``.
+
+        Raises:
+            ConflictError: The page is no longer at ``base_rev``.
+            InvalidRequestError: An edit's ``old`` text does not appear exactly once.
+        """
+        edits_json = _edits.dump_json(edits).decode()
+        return Proposal.model_validate_json(self._kernel.propose_edit(job, page_id, base_rev, edits_json, rationale))
+
+    def propose_page(
+        self,
+        job: str,
+        page_id: str,
+        *,
+        type: str,
+        title: str,
+        description: str,
+        body: str,
+        rationale: str,
+        tags: list[str] | None = None,
+    ) -> Proposal:
+        """``propose_page``: a new page, created as a draft.
+
+        Raises:
+            InvalidRequestError: The page already exists, or its id is not valid.
+        """
+        raw = self._kernel.propose_page(job, page_id, type, title, description, tags or [], body, rationale)
+        return Proposal.model_validate_json(raw)
+
+    def cite(self, proposal_id: str, claim: str, source: str, locator: str, source_id: str | None = None) -> Proposal:
+        """``cite``: back ``claim``, text the proposal adds, with ``locator`` in the raw source ``source``.
+
+        Raises:
+            InvalidRequestError: The claim is not in the added text, or the proposal is no longer pending.
+            NotFoundError: No raw source or proposal by that name.
+        """
+        return Proposal.model_validate_json(self._kernel.cite(proposal_id, claim, source, locator, source_id))
+
+    def flag(self, job: str, page_id: str, kind: str, note: str) -> Proposal:
+        """``flag``: report a contradiction, outdated claim or gap on a page, for review."""
+        return Proposal.model_validate_json(self._kernel.flag(job, page_id, kind, note))
+
+    def proposals(self) -> list[Proposal]:
+        """Every proposal with its preview, oldest first."""
+        return _proposals.validate_json(self._kernel.proposals())
+
+    def proposal(self, proposal_id: str) -> Proposal:
+        """One proposal with its preview."""
+        return Proposal.model_validate_json(self._kernel.proposal(proposal_id))
 
     def graph_issues(self) -> GraphIssues:
         """Orphan pages and broken links."""
