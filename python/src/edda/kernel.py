@@ -144,6 +144,14 @@ class Kernel:
         """Rejects a pending proposal; the page is untouched. Returns the journal entry it wrote."""
         return JournalEntry.model_validate_json(self._kernel.reject(proposal_id, reason, by))
 
+    def rollback(self, page_id: str, rev: int, by: str = "owner") -> JournalEntry:
+        """Restores a page to an earlier revision the kernel wrote; the restored text becomes a new revision.
+
+        Raises:
+            NotFoundError: The journal has no stored content for that revision, or it is the current one.
+        """
+        return JournalEntry.model_validate_json(self._kernel.rollback(page_id, rev, by))
+
     def proposals(self) -> list[Proposal]:
         """Every proposal with its preview, oldest first."""
         return _proposals.validate_json(self._kernel.proposals())
