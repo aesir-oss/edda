@@ -76,6 +76,9 @@ fn gate_err(e: edda_kernel::KernelError) -> PyErr {
         blocked @ edda_kernel::KernelError::Blocked { .. } => {
             InvalidRequestError::new_err(blocked.to_string())
         }
+        missing @ edda_kernel::KernelError::NoSuchRevision { .. } => {
+            NotFoundError::new_err(missing.to_string())
+        }
     }
 }
 
@@ -447,6 +450,21 @@ impl Kernel {
                 .write()
                 .map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
             to_json(&outcome.entry)
+        })
+    }
+
+    /// Restores a page to an earlier journaled revision as a new revision, then refreshes the index. Returns the
+    /// journal entry.
+    #[pyo3(signature = (page, rev, by = "owner"))]
+    fn rollback(&self, py: Python<'_>, page: &str, rev: u64, by: &str) -> PyResult<String> {
+        py.detach(|| {
+            let restored = edda_kernel::rollback(&self.vault, page, rev, by).map_err(gate_err)?;
+            let fresh = Index::open(&self.vault).map_err(index_err)?;
+            *self
+                .index
+                .write()
+                .map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
+            to_json(&restored.entry)
         })
     }
 

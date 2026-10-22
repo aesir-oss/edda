@@ -5,10 +5,17 @@
 
 use edda_journal::{Entry, Journal, JournalError, NewEntry, write_log};
 use edda_store::{
-    Change, Generated, OWNER, Page, Proposal, RawEntry, RawMeta, Status, StoreError, Vault,
+    Change, Generated, OWNER, Page, PageId, Proposal, RawEntry, RawMeta, Status, StoreError, Vault,
     Verification, sha256_hex,
 };
 use serde_json::json;
+
+/// What a rollback did: the journal entry and the page as restored.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Restored {
+    pub entry: Entry,
+    pub page: Page,
+}
 
 /// What adding a source did.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,6 +74,8 @@ pub enum KernelError {
     Journal(#[from] JournalError),
     #[error("{id} cannot be applied: {}", issues.join("; "))]
     Blocked { id: String, issues: Vec<String> },
+    #[error("{page} has no journaled revision {rev} to roll back to")]
+    NoSuchRevision { page: String, rev: u64 },
 }
 
 pub type Result<T, E = KernelError> = std::result::Result<T, E>;
@@ -159,6 +168,58 @@ pub fn apply(vault: &Vault, id: &str, by: &str, verified: bool) -> Result<Outcom
         proposal,
         entry,
         page,
+    })
+}
+
+/// Restores a page to an earlier revision, on behalf of `by`. History is never rewritten: the restored text becomes a
+/// new revision, journaled as `rollback`, with a `verified` entry for `by`.
+///
+/// Only revisions the kernel wrote are available, because the journal keeps the page as written for each of them;
+/// hand-written history (such as the example vault's) has nothing to restore from.
+pub fn rollback(vault: &Vault, page: &str, rev: u64, by: &str) -> Result<Restored> {
+    let id = PageId::new(page)?;
+    let current = vault.read_page(&id)?;
+    let current_rev = current.frontmatter.edda_rev.unwrap_or(0);
+    let mut journal = Journal::open(vault.journal_dir())?;
+    let content = journal
+        .history(id.as_str())?
+        .into_iter()
+        .rev()
+        .filter(|e| e.rev == Some(rev) && rev < current_rev)
+        .find_map(|e| {
+            e.data
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(str::to_owned)
+        })
+        .ok_or_else(|| KernelError::NoSuchRevision {
+            page: id.to_string(),
+            rev,
+        })?;
+    let mut restored = Page::parse(id.clone(), &content)?;
+    let at = now();
+    let fm = &mut restored.frontmatter;
+    fm.edda_rev = Some(current_rev + 1);
+    fm.verified.push(Verification {
+        by: by.to_owned(),
+        at: Some(at.clone()),
+        extra: Default::default(),
+    });
+    vault.write_page(&restored)?;
+    let entry = journal.append(NewEntry {
+        at: Some(at),
+        actor: by.to_owned(),
+        action: "rollback".to_owned(),
+        page: Some(id.to_string()),
+        rev: Some(current_rev + 1),
+        summary: format!("rolled back to revision {rev}"),
+        data: json!({ "from_rev": current_rev, "to_rev": rev, "content": restored.to_markdown()? }),
+    })?;
+    vault.write_index()?;
+    write_log(vault)?;
+    Ok(Restored {
+        entry,
+        page: restored,
     })
 }
 
@@ -456,5 +517,84 @@ mod source_tests {
             2,
             "nothing stored without a journal entry"
         );
+    }
+}
+
+#[cfg(test)]
+mod rollback_tests {
+    use std::fs;
+
+    use edda_store::{OWNER, TextEdit};
+
+    use super::*;
+
+    #[test]
+    fn rolls_back_by_appending_a_revision() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("wiki")).unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        fs::write(
+            vault.wiki_dir().join("a.md"),
+            "---\ntype: Concept\ntitle: A\ndescription: d\nedda_rev: 1\n---\none\n",
+        )
+        .unwrap();
+        for (rev, text) in [(1, "two"), (2, "three")] {
+            let old = if rev == 1 { "one" } else { "two" };
+            let change = Change::Edit {
+                page: "a.md".into(),
+                base_rev: rev,
+                edits: vec![TextEdit {
+                    old: old.into(),
+                    new: text.into(),
+                }],
+            };
+            let p = vault.propose(OWNER, change, text).unwrap();
+            accept(&vault, &p.id, "owner").unwrap();
+        }
+        let restored = rollback(&vault, "a.md", 2, "owner").unwrap();
+        assert_eq!(restored.page.body, "two\n");
+        assert_eq!(restored.page.frontmatter.edda_rev, Some(4));
+        assert_eq!(
+            (restored.entry.action.as_str(), restored.entry.rev),
+            ("rollback", Some(4))
+        );
+        assert_eq!(restored.entry.summary, "rolled back to revision 2");
+        assert_eq!(
+            vault.read_page(&PageId::new("a.md").unwrap()).unwrap(),
+            restored.page
+        );
+        assert!(
+            fs::read_to_string(vault.wiki_dir().join("log.md"))
+                .unwrap()
+                .contains("rolled back to revision 2")
+        );
+
+        let again = rollback(&vault, "a.md", 3, "owner").unwrap();
+        assert_eq!(again.page.body, "three\n");
+        assert_eq!(
+            Journal::open(vault.journal_dir())
+                .unwrap()
+                .verify()
+                .unwrap(),
+            4
+        );
+
+        for (rev, why) in [
+            (1, "never journaled"),
+            (5, "the current revision"),
+            (9, "never existed"),
+        ] {
+            assert!(
+                matches!(
+                    rollback(&vault, "a.md", rev, "owner"),
+                    Err(KernelError::NoSuchRevision { .. })
+                ),
+                "{why}"
+            );
+        }
+        assert!(matches!(
+            rollback(&vault, "../x.md", 1, "owner"),
+            Err(KernelError::Store(_))
+        ));
     }
 }

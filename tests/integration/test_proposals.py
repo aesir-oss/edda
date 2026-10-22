@@ -109,3 +109,21 @@ def test_conflicts_blocks_and_rejections(vault_copy: Path) -> None:
     assert kernel.proposal(uncited.id).status == "rejected"
     with pytest.raises(InvalidRequestError, match="no longer pending"):
         kernel.accept(uncited.id)
+
+
+def test_rolls_back_to_a_revision_the_kernel_wrote(vault_copy: Path) -> None:
+    kernel = Kernel(vault_copy)
+    for old, new in [("orphan.", "orphan. Zebras."), ("Zebras.", "Lions.")]:
+        rev = kernel.read_page("bm25.md").rev
+        assert rev is not None
+        kernel.accept(kernel.propose_edit("owner", "bm25.md", rev, [TextEdit(old=old, new=new)], new).id)
+    assert kernel.search("lions")[0].id == "bm25.md"
+
+    entry = kernel.rollback("bm25.md", 2)
+    assert (entry.action, entry.rev) == ("rollback", 4)
+    page = kernel.read_page("bm25.md")
+    assert "Zebras." in page.body
+    assert "Lions" not in page.body
+    assert kernel.search("lions") == []
+    with pytest.raises(NotFoundError, match="no journaled revision 1"):
+        kernel.rollback("bm25.md", 1)
