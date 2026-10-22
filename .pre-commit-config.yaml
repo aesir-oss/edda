@@ -10,9 +10,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts|_bmad/.*|\.claude/skills/.*)$
+        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts|_bmad/.*|\.claude/skills/.*|examples/vault/raw/.*)$
       - id: trailing-whitespace
-        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts|_bmad/.*|\.claude/skills/.*)$
+        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts|_bmad/.*|\.claude/skills/.*|examples/vault/raw/.*)$
       - id: check-yaml
         exclude: ^(_bmad|\.claude/skills)/
       - id: check-toml
