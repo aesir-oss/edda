@@ -16,6 +16,7 @@ and read-only browsing, and nothing in it calls an LLM.
 | `crates/edda-py/` | PyO3 bindings, built by maturin into `edda._kernel`; a thin layer, tested from Python |
 | `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `drivers` (importers), `llm` (local models by default, Anthropic with the user's own key), `context` (packing ranked pages into a token budget), `api` (FastAPI), `log` (structlog) |
 | `web/` | Vite + React + TypeScript shell |
+| `docs/design/` | Design notes: decisions and the reference material behind them, such as `document-ingestion.md` |
 | `examples/vault/` | A small hand-written vault the tests and `pixi run dev` use |
 | `tests/unit`, `tests/integration` | Python tests; Rust tests live in each crate, web tests next to their components |
 
