@@ -50,6 +50,7 @@ pre-commit = "*"
 cargo-llvm-cov = "*"
 git-cliff = "*"
 pre-commit-hooks = ">=6.0.0,<7"
+act = ">=0.2.89,<0.3"
 
 [feature.dev.tasks]
 bootstrap = { cmd = "pre-commit install --hook-type pre-commit --hook-type commit-msg", depends-on = [
@@ -98,6 +99,10 @@ gen-api = { cmd = "python -m edda.api.openapi web/openapi.json && npm --prefix w
 api-drift = { cmd = "git diff --exit-code -- web/openapi.json web/src/api/schema.d.ts", depends-on = [
   "gen-api",
 ] }
+
+# CI locally with nektos/act, in Docker. The image is pinned here so act never stops to ask for one; extra arguments
+# pass through, for example `pixi run act -j unit --matrix python-version:3.14`.
+act = { cmd = "act --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest", description = "run the CI workflow locally in Docker" }
 
 changelog = "git cliff -o CHANGELOG.md"
 pre-commit-run = "pre-commit run --all-files"
