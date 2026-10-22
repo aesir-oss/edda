@@ -5,7 +5,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 Job = Literal["ingest", "query", "lint", "research", "summary"]
-Provider = Literal["local", "anthropic"]
+# An endpoint name from ``[llm.endpoints]`` (``local``, ``nvidia``, ...) or ``anthropic``.
+Provider = str
 Stop = Literal["end", "tool_use", "max_tokens", "refusal"]
 
 

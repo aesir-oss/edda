@@ -8,8 +8,9 @@ import time
 from pathlib import Path
 
 import structlog
+from pydantic import ValidationError
 
-from edda.config import load_config
+from edda.config import EddaConfig, load_config
 from edda.llm.client import LLM
 from edda.llm.errors import LLMError
 from edda.llm.types import Job, Tool, ToolResult, ToolTurn, UserTurn
@@ -52,14 +53,26 @@ def smoke(llm: LLM, job: Job = "ingest") -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """``llm-smoke <vault>``: exit 0 when the ingest job's model calls tools and answers."""
+    """``llm-smoke <vault> [provider]``: exit 0 when the model calls tools and answers.
+
+    The provider defaults to the ingest job's; naming one (an endpoint, or ``anthropic``) tests it instead.
+    """
     from edda.log import configure_logging
 
     configure_logging()
     args = sys.argv[1:] if argv is None else argv
     vault = Path(args[0]) if args else Path("examples/vault")
+    config = load_config(vault)
+    if len(args) > 1:
+        data = config.model_dump()
+        data["llm"]["ingest"] = args[1]
+        try:
+            config = EddaConfig.model_validate(data)
+        except ValidationError as exc:
+            log.error("smoke_unknown_provider", provider=args[1], error=str(exc.errors()[0]["msg"]))
+            return 2
     try:
-        return 0 if smoke(LLM(load_config(vault))) else 1
+        return 0 if smoke(LLM(config)) else 1
     except LLMError as exc:
         log.error("smoke_failed", error=str(exc))
         return 1

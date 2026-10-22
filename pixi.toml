@@ -107,7 +107,10 @@ api-drift = { cmd = "git diff --exit-code -- web/openapi.json web/src/api/schema
 act = { cmd = "act --container-architecture linux/amd64 -P ubuntu-latest=catthehacker/ubuntu:act-latest", description = "run the CI workflow locally in Docker" }
 
 # Downloads a known local model (edda.llm.models) to ~/.cache/edda/models and checks its SHA-256.
-llm-smoke = { args = [{ arg = "vault", default = "examples/vault" }], cmd = "python -m edda.llm.smoke {{ vault }}" }
+llm-smoke = { args = [
+  { arg = "vault", default = "examples/vault" },
+  { arg = "provider", default = "" },
+], cmd = "python -m edda.llm.smoke {{ vault }} {{ provider }}" }
 llm-fetch = { args = [{ arg = "name", default = "qwen3-14b" }], cmd = "python -m edda.llm.models {{ name }}" }
 
 changelog = "git cliff -o CHANGELOG.md"

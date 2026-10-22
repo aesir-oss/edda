@@ -28,6 +28,8 @@ def test_missing_keys_take_defaults(tmp_path: Path) -> None:
     [
         "[llm]\ningets = 'local'\n",
         "[llm]\ningest = 'openai'\n",
+        "[llm.endpoints.anthropic]\nbase_url = 'x'\nmodel = 'y'\n",
+        "[llm.endpoints.mine]\nmodel = 'no base_url'\n",
         "[budgets]\ningest = 0\n",
         "[drivers.web]\ntimeout_seconds = 'soon'\n",
         "[unknown]\n",
@@ -38,3 +40,16 @@ def test_rejects_typos_and_bad_values(tmp_path: Path, text: str) -> None:
     (tmp_path / "edda.toml").write_text(text)
     with pytest.raises(ConfigError, match=r"edda\.toml"):
         load_config(tmp_path)
+
+
+def test_endpoints_merge_over_the_built_in_ones(tmp_path: Path) -> None:
+    (tmp_path / "edda.toml").write_text(
+        "[llm]\nquery = 'ollama'\n"
+        "[llm.endpoints.local]\nmodel = 'Qwen3-14B-Q4_K_M.gguf'\n"
+        "[llm.endpoints.ollama]\nbase_url = 'http://localhost:11434/v1'\nmodel = 'qwen3:14b'\n"
+    )
+    llm = load_config(tmp_path).llm
+    assert llm.endpoints["local"].base_url == "http://127.0.0.1:8080/v1"
+    assert llm.endpoints["local"].model == "Qwen3-14B-Q4_K_M.gguf"
+    assert llm.endpoints["nvidia"].api_key_env == "NVIDIA_API_KEY"
+    assert (llm.query, llm.endpoints["ollama"].api_key_env) == ("ollama", None)

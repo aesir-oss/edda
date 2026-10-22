@@ -38,7 +38,7 @@ class LLM:
         """The provider and model a job uses."""
         llm = self.config.llm
         provider: Provider = getattr(llm, job)
-        model = llm.local.model if provider == "local" else getattr(llm.anthropic, job)
+        model = getattr(llm.anthropic, job) if provider == "anthropic" else llm.endpoints[provider].model
         return provider, model
 
     def chat(
@@ -76,12 +76,12 @@ class LLM:
 
     def _provider(self, name: Provider) -> ChatProvider:
         if name not in self._providers:
-            if name == "local":
-                from edda.llm.local import LocalProvider
-
-                self._providers[name] = LocalProvider(self.config.llm.local)
-            else:
+            if name == "anthropic":
                 from edda.llm.claude import ClaudeProvider
 
                 self._providers[name] = ClaudeProvider(self.config.llm.anthropic)
+            else:
+                from edda.llm.openai_compat import OpenAICompatibleProvider
+
+                self._providers[name] = OpenAICompatibleProvider(name, self.config.llm.endpoints[name])
         return self._providers[name]
