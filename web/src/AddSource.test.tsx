@@ -27,6 +27,27 @@ test('uploads the chosen file and says what happened', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(2)
 })
 
+test('offers to ingest what it added', async () => {
+  const fetchMock = mockApi({
+    '/api/sources/markdown': { source: { hash: 'ab'.repeat(32), title: 'Notes' }, added: true },
+    '/api/jobs/ingest': { id: 'run_0001', job: 'ingest', target: 'ab'.repeat(32), state: 'queued', queued: 't' },
+  })
+  renderAt('/', <AddSource />)
+  fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('notes.md')] } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Ingest' }))
+  expect(await screen.findByRole('link', { name: 'Review' })).toHaveAttribute('href', '/review')
+  const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
+  expect(url).toBe('/api/jobs/ingest')
+  expect(init.body).toBe(JSON.stringify({ source: 'ab'.repeat(32) }))
+
+  mockApi({
+    '/api/sources/markdown': { source: { hash: 'cd'.repeat(32), title: 'More' }, added: true },
+    '/api/jobs/ingest': { status: 400, detail: 'no model' },
+  })
+  fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('more.md')] } })
+  expect(await screen.findByText('Added More')).toBeInTheDocument()
+})
+
 test('names untitled sources by hash and shows errors', async () => {
   mockApi({ '/api/sources/markdown': () => ({ source: { hash: 'cd'.repeat(32), title: null }, added: true }) })
   renderAt('/', <AddSource />)

@@ -1,0 +1,245 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { api, type AcceptRequest, type PageRevision, type Proposal, type ProposalCitation } from './api/client'
+import { ErrorNotice } from './ErrorNotice'
+import { lineRange } from './locator'
+
+const KINDS = { edit: 'Edit', new_page: 'New page', flag: 'Flag' } as const
+
+/** Pending proposals, oldest first, beside the one being reviewed. */
+export function Review() {
+  const selected = useParams().id
+  const proposals = useQuery({ queryKey: ['proposals', 'pending'], queryFn: () => api.proposals('pending') })
+  const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs })
+  const active = (jobs.data ?? []).filter((j) => j.state === 'queued' || j.state === 'running')
+  const failed = (jobs.data ?? []).filter((j) => j.state === 'failed')
+
+  if (proposals.error) return <ErrorNotice error={proposals.error} />
+  const pending = proposals.data ?? []
+  const current = selected ?? pending[0]?.id
+  return (
+    <div className="review-layout">
+      <nav aria-label="Pending proposals">
+        <p className="muted">
+          {proposals.isPending ? 'Loading…' : `${pending.length} pending`}
+          {active.length > 0 && <> · {active.length} job running</>}
+        </p>
+        {failed.map((j) => (
+          <p key={j.id} role="alert" className="error">
+            {j.job} {j.target.slice(0, 8)} failed: {j.error}
+          </p>
+        ))}
+        <ul className="list">
+          {pending.map((p) => (
+            <li key={p.id} className={p.id === current ? 'row row-selected' : 'row'}>
+              <Link to={`/review/${p.id}`} className="row-title">
+                {p.change.page}
+              </Link>
+              <span className="badge">{KINDS[p.change.kind]}</span>
+              {p.preview.issues.length > 0 && <span className="badge badge-warn">blocked</span>}
+              <p className="row-text">{p.rationale}</p>
+            </li>
+          ))}
+        </ul>
+        {pending.length === 0 && !proposals.isPending && <p className="muted">Nothing to review.</p>}
+      </nav>
+      {current ? <ProposalReview key={current} id={current} /> : <div />}
+    </div>
+  )
+}
+
+function ProposalReview({ id }: { id: string }) {
+  const proposal = useQuery({ queryKey: ['proposal', id], queryFn: () => api.proposal(id) })
+  if (proposal.error) return <ErrorNotice error={proposal.error} />
+  if (!proposal.data) return <p className="muted">Loading proposal…</p>
+  return <ProposalDetail proposal={proposal.data} />
+}
+
+function ProposalDetail({ proposal }: { proposal: Proposal }) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const [editing, setEditing] = useState(false)
+  const [reason, setReason] = useState('')
+  const [revision, setRevision] = useState<AcceptRequest>({})
+  const change = proposal.change
+  const citations = proposal.citations ?? []
+  const decided = () => {
+    void queryClient.invalidateQueries({ queryKey: ['proposals'] })
+    void queryClient.invalidateQueries({ queryKey: ['pages'] })
+    void queryClient.invalidateQueries({ queryKey: ['page', change.page] })
+    navigate('/review')
+  }
+  const accept = useMutation({ mutationFn: () => api.accept(proposal.id, editing ? revision : {}), onSuccess: decided })
+  const reject = useMutation({ mutationFn: () => api.reject(proposal.id, reason), onSuccess: decided })
+  const busy = accept.isPending || reject.isPending
+  const error = accept.error ?? reject.error
+
+  return (
+    <article aria-label={`Proposal ${proposal.id}`}>
+      <h1>
+        {KINDS[change.kind]}: {change.kind === 'new_page' ? change.page : <Link to={`/page/${change.page}`}>{change.page}</Link>}
+      </h1>
+      <p className="muted">
+        {proposal.id} · by {proposal.job} · {proposal.created}
+      </p>
+      <p>{proposal.rationale}</p>
+      {change.kind === 'flag' && (
+        <p>
+          <span className="badge badge-warn">{change.flag}</span> {change.note}
+        </p>
+      )}
+      {proposal.preview.issues.length > 0 && (
+        <ul className="issues" aria-label="Issues">
+          {proposal.preview.issues.map((issue) => (
+            <li key={issue}>{issue}</li>
+          ))}
+        </ul>
+      )}
+      {editing ? <Editor proposal={proposal} onChange={setRevision} /> : <Diff text={proposal.preview.diff} />}
+      {citations.length > 0 && (
+        <section aria-label="Citations">
+          <h2>Citations</h2>
+          {citations.map((c) => (
+            <CitationCheck key={c.id} citation={c} />
+          ))}
+        </section>
+      )}
+      <div className="actions">
+        <button type="button" className="button button-primary" disabled={busy} onClick={() => accept.mutate()}>
+          {editing ? 'Accept my version' : 'Accept'}
+        </button>
+        {change.kind !== 'flag' && (
+          <button type="button" className="button" disabled={busy} onClick={() => {
+              setEditing(!editing)
+              setRevision({})
+            }}>
+            {editing ? 'Discard my changes' : 'Edit'}
+          </button>
+        )}
+        <input
+          aria-label="Reason for rejecting"
+          placeholder="Why reject?"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <button type="button" className="button" disabled={busy || !reason.trim()} onClick={() => reject.mutate()}>
+          Reject
+        </button>
+      </div>
+      {error && (
+        <p role="alert" className="error">
+          {error.message}
+        </p>
+      )}
+    </article>
+  )
+}
+
+/** A unified diff, with added and removed lines marked. */
+export function Diff({ text }: { text: string }) {
+  if (!text) return null
+  const lines = text.replace(/\n$/, '').split('\n')
+  return (
+    <pre className="diff" aria-label="Changes">
+      {lines.map((line, i) => {
+        const kind =
+          line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')
+            ? 'diff-meta'
+            : line.startsWith('+')
+              ? 'diff-add'
+              : line.startsWith('-')
+                ? 'diff-del'
+                : undefined
+        return (
+          <span key={i} className={kind}>
+            {line}
+            {'\n'}
+          </span>
+        )
+      })}
+    </pre>
+  )
+}
+
+/** The proposal's own text, editable. Only what the owner changes is sent; the rest stays the model's. */
+function Editor({ proposal, onChange }: { proposal: Proposal; onChange: (revision: AcceptRequest) => void }) {
+  const change = proposal.change
+  const [edits, setEdits] = useState(change.kind === 'edit' ? change.edits : [])
+  const [page, setPage] = useState<PageRevision>(
+    change.kind === 'new_page' ? { title: change.title, description: change.description, body: change.body } : {},
+  )
+  if (change.kind === 'edit') {
+    return (
+      <div className="editor">
+        {edits.map((edit, i) => (
+          <label key={i}>
+            <span className="muted">Replaces: {edit.old}</span>
+            <textarea
+              aria-label={`Edit ${i + 1}`}
+              rows={Math.min(12, edit.new.split('\n').length + 1)}
+              value={edit.new}
+              onChange={(e) => {
+                const next = edits.map((x, j) => (j === i ? { ...x, new: e.target.value } : x))
+                setEdits(next)
+                onChange({ edits: next })
+              }}
+            />
+          </label>
+        ))}
+      </div>
+    )
+  }
+  const field = (name: 'title' | 'description' | 'body') => (value: string) => {
+    const next = { ...page, [name]: value }
+    setPage(next)
+    onChange({ page: next })
+  }
+  return (
+    <div className="editor">
+      <label>
+        <span className="muted">Title</span>
+        <input value={page.title ?? ''} onChange={(e) => field('title')(e.target.value)} />
+      </label>
+      <label>
+        <span className="muted">Description</span>
+        <input value={page.description ?? ''} onChange={(e) => field('description')(e.target.value)} />
+      </label>
+      <label>
+        <span className="muted">Body</span>
+        <textarea rows={14} value={page.body ?? ''} onChange={(e) => field('body')(e.target.value)} />
+      </label>
+    </div>
+  )
+}
+
+/** A claim beside the source text it cites, so the owner can check one against the other. */
+function CitationCheck({ citation }: { citation: ProposalCitation }) {
+  const range = lineRange(citation.locator)
+  const source = useQuery({
+    queryKey: ['source', citation.raw, range?.start, range?.end],
+    queryFn: () => api.source(citation.raw, range ?? {}),
+  })
+  return (
+    <div className="citation">
+      <blockquote aria-label="Claim">{citation.claim}</blockquote>
+      <div>
+        <p className="muted">
+          {citation.title ?? citation.resource} · {citation.locator}
+        </p>
+        {source.error ? (
+          <p className="error">{source.error.message}</p>
+        ) : range ? (
+          <pre className="source-text" aria-label="Cited source text">
+            {source.data?.text ?? 'Loading…'}
+          </pre>
+        ) : (
+          <details>
+            <summary>The locator names no lines; show the whole source</summary>
+            <pre className="source-text">{source.data?.text ?? 'Loading…'}</pre>
+          </details>
+        )}
+      </div>
+    </div>
+  )
+}

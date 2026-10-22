@@ -194,3 +194,119 @@ aside h2 {
   border-radius: 6px;
   background: var(--surface);
 }
+
+.count {
+  margin: 0 0 0 6px;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.review-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 28px;
+}
+
+@media (max-width: 800px) {
+  .review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.row-selected {
+  border-color: var(--accent);
+}
+
+.diff,
+.source-text {
+  font-size: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.diff-add {
+  color: #1a7f37;
+}
+
+.diff-del {
+  color: var(--bad);
+}
+
+.diff-meta {
+  color: var(--muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  .diff-add {
+    color: #6fdd8b;
+  }
+}
+
+.citation {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 800px) {
+  .citation {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.citation blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+textarea {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.button {
+  font: inherit;
+  color: var(--ink);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--surface);
+}
