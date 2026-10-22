@@ -60,6 +60,10 @@ class Kernel:
         """The journal entries for a page, oldest first."""
         return _entries.validate_json(self._kernel.history(page_id))
 
+    def write_log(self) -> int:
+        """Regenerates ``log.md`` from the journal; returns the number of entries it lists."""
+        return self._kernel.write_log()
+
     def verify_journal(self) -> int:
         """Checks the journal's hash chain; returns the number of entries."""
         return self._kernel.verify_journal()

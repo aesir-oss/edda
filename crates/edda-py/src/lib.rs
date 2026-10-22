@@ -160,13 +160,17 @@ impl Kernel {
                     })
                     .collect())
             })?;
-            let issues: Vec<String> = self
-                .vault
-                .check(&page)
-                .map_err(store_err)?
-                .into_iter()
-                .map(|issue| issue.to_string())
-                .collect();
+            // index.md and log.md are the kernel's own output, not pages it holds to the page rules.
+            let issues: Vec<String> = if page.id.is_generated() {
+                Vec::new()
+            } else {
+                self.vault
+                    .check(&page)
+                    .map_err(store_err)?
+                    .into_iter()
+                    .map(|issue| issue.to_string())
+                    .collect()
+            };
             to_json(&json!({
                 "id": page.id.as_str(),
                 "title": page.title(),
@@ -236,6 +240,11 @@ impl Kernel {
             let journal = Journal::open(self.vault.journal_dir()).map_err(journal_err)?;
             to_json(&journal.history(id.as_str()).map_err(journal_err)?)
         })
+    }
+
+    /// Regenerates `log.md` from the journal and returns how many entries it lists.
+    fn write_log(&self, py: Python<'_>) -> PyResult<usize> {
+        py.detach(|| edda_journal::write_log(&self.vault).map_err(journal_err))
     }
 
     /// Checks the journal's hash chain and returns how many entries it has.

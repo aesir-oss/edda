@@ -1,9 +1,10 @@
-//! The hand-written example vault follows every kernel rule, and its generated files are current.
+//! The hand-written example vault follows every kernel rule, and its generated `index.md` is current (`log.md` is
+//! checked against the journal in edda-journal's tests).
 //! `EDDA_WRITE_EXAMPLES=1 cargo test -p edda-store --test example_vault` regenerates them.
 
 use std::path::PathBuf;
 
-use edda_store::{Vault, render_index, render_log};
+use edda_store::{Vault, render_index};
 
 fn example() -> Vault {
     Vault::open(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/vault")).unwrap()
@@ -36,12 +37,10 @@ fn generated_files_are_current() {
     let vault = example();
     if std::env::var_os("EDDA_WRITE_EXAMPLES").is_some() {
         vault.write_index().unwrap();
-        vault.write_log(&[]).unwrap();
     }
-    let read = |name| std::fs::read_to_string(vault.wiki_dir().join(name)).unwrap();
+    let read = |name: &str| std::fs::read_to_string(vault.wiki_dir().join(name)).unwrap();
     assert_eq!(
         read("index.md"),
         render_index(&vault.config().title, &vault.pages().unwrap())
     );
-    assert_eq!(read("log.md"), render_log(&[]));
 }
