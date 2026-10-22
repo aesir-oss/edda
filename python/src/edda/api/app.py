@@ -1,8 +1,9 @@
-"""The FastAPI app over one vault: pages, search, sources, links and the link graph, and importing sources."""
+"""The FastAPI app over one vault: pages, search, sources and links, proposals and their review, jobs and events."""
 
 import os
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
@@ -10,19 +11,28 @@ from typing import Annotated
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
 
-from edda import okf_version
+from edda import okf_version, review
+from edda.api.events import Events, stream
 from edda.drivers import DriverError, import_markdown
-from edda.kernel import InvalidRequestError, Kernel, NotFoundError
+from edda.jobs.background import Jobs
+from edda.kernel import ConflictError, InvalidRequestError, Kernel, NotFoundError
 from edda.log import configure_logging
 from edda.models import (
+    AcceptRequest,
     AddedSource,
+    Decision,
     GraphIssues,
+    IngestRequest,
+    JobRun,
     JournalEntry,
     Links,
     Page,
     PageSummary,
+    Proposal,
+    RejectRequest,
     SearchHit,
     Source,
     SourceSummary,
@@ -32,6 +42,8 @@ log = structlog.get_logger("edda.api")
 
 VAULT_ENV = "EDDA_VAULT"
 MAX_UPLOAD_BYTES = 10_000_000
+
+Ingest = Callable[[Kernel, str], list[str]]
 
 
 class VaultInfo(BaseModel):
@@ -56,6 +68,7 @@ def get_kernel(request: Request) -> Kernel:
         if vault is None:
             raise HTTPException(503, f"no vault configured; set {VAULT_ENV}")
         kernel = Kernel(vault)
+        kernel.listen(request.app.state.events.publish)
         request.app.state.kernel = kernel
         log.info("vault_opened", vault=str(vault), title=kernel.title)
     return kernel
@@ -83,18 +96,45 @@ def is_stale(stale_after: str | None, today: date) -> bool:
         return False
 
 
-def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastAPI:
-    """Builds the API for ``vault`` (default: the ``EDDA_VAULT`` environment variable), or around ``kernel``."""
+def run_ingest(kernel: Kernel, source: str) -> list[str]:
+    """Runs the ingest job with the vault's own model settings; returns the ids of the proposals it made."""
+    from edda.config import load_config
+    from edda.jobs.ingest import ingest
+    from edda.llm import LLM
+
+    config = load_config(kernel.vault)
+    return ingest(kernel, LLM(config), config, source).proposals
+
+
+def create_app(vault: Path | None = None, kernel: Kernel | None = None, ingest: Ingest = run_ingest) -> FastAPI:
+    """Builds the API for ``vault`` (default: the ``EDDA_VAULT`` environment variable), or around ``kernel``.
+
+    ``ingest`` runs the ingest job; tests pass one that needs no model.
+    """
     configure_logging()
     if vault is None and kernel is None and os.environ.get(VAULT_ENV):
         vault = Path(os.environ[VAULT_ENV])
+    events = Events()
+    jobs = Jobs(listener=lambda run: events.publish("job", run.model_dump(mode="json")))
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        yield
+        events.close()
+        jobs.shutdown()
+
     app = FastAPI(
         title="Edda",
         version="0.1.0",
-        summary="Read-only access to an Edda vault: pages, search, sources and links.",
+        summary="An Edda vault: pages, search and sources, proposals and their review, and the jobs that make them.",
+        lifespan=lifespan,
     )
     app.state.vault = vault
     app.state.kernel = kernel
+    app.state.events = events
+    app.state.jobs = jobs
+    if kernel is not None:
+        kernel.listen(events.publish)
 
     @app.middleware("http")
     async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
@@ -120,6 +160,10 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastA
     @app.exception_handler(InvalidRequestError)
     async def invalid(_: Request, exc: InvalidRequestError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=400)
+
+    @app.exception_handler(ConflictError)
+    async def conflict(_: Request, exc: ConflictError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
 
     @app.get("/api/health", tags=["meta"])
     def health() -> Health:
@@ -220,5 +264,53 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastA
     def refresh_index(kernel: KernelDep) -> Response:
         kernel.refresh_index()
         return Response(status_code=204)
+
+    @app.get("/api/proposals", tags=["proposals"])
+    def list_proposals(
+        kernel: KernelDep,
+        status: Annotated[str | None, Query(description="Only proposals in this state, such as pending")] = None,
+    ) -> list[Proposal]:
+        return [p for p in kernel.proposals() if status is None or p.status == status]
+
+    @app.get("/api/proposals/{proposal_id}", tags=["proposals"])
+    def read_proposal(proposal_id: str, kernel: KernelDep) -> Proposal:
+        return kernel.proposal(proposal_id)
+
+    @app.post(
+        "/api/proposals/{proposal_id}/accept",
+        tags=["proposals"],
+        responses={409: {"description": "The page changed since the proposal was made"}},
+    )
+    def accept_proposal(proposal_id: str, kernel: KernelDep, body: AcceptRequest | None = None) -> Decision:
+        """Applies a proposal, or the owner's revision of it (``edits`` for an edit, ``page`` for a new page)."""
+        revision = body or AcceptRequest()
+        return review.accept(kernel, proposal_id, edits=revision.edits, page=revision.page)
+
+    @app.post("/api/proposals/{proposal_id}/reject", tags=["proposals"])
+    def reject_proposal(proposal_id: str, body: RejectRequest, kernel: KernelDep) -> Decision:
+        return review.reject(kernel, proposal_id, body.reason)
+
+    @app.post("/api/jobs/ingest", tags=["jobs"], status_code=202)
+    def start_ingest(body: IngestRequest, kernel: KernelDep) -> JobRun:
+        """Queues the ingest job for a raw source; its proposals arrive as events while it runs."""
+        source = kernel.read_source(body.source).hash
+        return jobs.start("ingest", source, lambda: ingest(kernel, source))
+
+    @app.get("/api/jobs", tags=["jobs"])
+    def list_jobs() -> list[JobRun]:
+        return jobs.runs()
+
+    @app.get("/api/jobs/{run_id}", tags=["jobs"])
+    def read_job(run_id: str) -> JobRun:
+        run = jobs.run(run_id)
+        if run is None:
+            raise HTTPException(404, f"no job {run_id}")
+        return run
+
+    @app.get("/api/events", tags=["events"], response_class=EventSourceResponse)
+    async def event_stream() -> AsyncIterable[ServerSentEvent]:
+        """``proposal``, ``source``, ``page`` and ``job`` events as the vault changes, after a ``ready`` event."""
+        async for event in stream(events):
+            yield event
 
     return app

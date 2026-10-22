@@ -203,3 +203,53 @@ class Related(_Model):
     title: str
     score: float
     via: Literal["search", "link"]
+
+
+class PageRevision(_Model):
+    """The owner's changes to a proposed new page; fields left out keep the model's text."""
+
+    title: str | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+    body: str | None = None
+
+
+class AcceptRequest(_Model):
+    """Accept a proposal as it is, or after the owner revised it: ``edits`` for an edit, ``page`` for a new page."""
+
+    edits: list[TextEdit] | None = None
+    page: PageRevision | None = None
+
+
+class RejectRequest(_Model):
+    """Why the owner turned a proposal down."""
+
+    reason: str = Field(min_length=1)
+
+
+class Decision(_Model):
+    """The decided proposal, the journal entry the kernel wrote, and the proposal it revised, if any."""
+
+    proposal: Proposal
+    entry: JournalEntry
+    revised_from: str | None = None
+
+
+class JobRun(_Model):
+    """A job started from the API and where it stands."""
+
+    id: str
+    job: str
+    target: str
+    state: Literal["queued", "running", "done", "failed"]
+    queued: str
+    started: str | None = None
+    finished: str | None = None
+    proposals: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class IngestRequest(_Model):
+    """The raw source to ingest, by full hash or unique prefix."""
+
+    source: str = Field(min_length=1)
