@@ -7,7 +7,7 @@ import { mockApi, renderAt } from './test-utils'
 afterEach(() => vi.unstubAllGlobals())
 
 test('shows the vault title and the library at the root', async () => {
-  mockApi({ '/api/vault': { title: 'Example vault', okf_version: '0.2', pages: 3 }, '/api/pages': pages })
+  mockApi({ '/api/vault': { title: 'Example vault', okf_version: '0.2', pages: 3 }, '/api/pages': pages, '/api/sources': [] })
   render(<App />)
   expect(await screen.findByText('Example vault')).toBeInTheDocument()
   expect(await screen.findByText('3 pages')).toBeInTheDocument()

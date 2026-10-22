@@ -311,7 +311,7 @@
         "type": "object"
       },
       "PageSummary": {
-        "description": "A page as the Library lists it.",
+        "description": "A page as the Library lists it; ``sources`` are the hashes of the raw sources it cites.",
         "properties": {
           "description": {
             "anyOf": [
@@ -327,6 +327,29 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "stale_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stale After"
           },
           "status": {
             "title": "Status",
@@ -458,6 +481,64 @@
           "text"
         ],
         "title": "Source",
+        "type": "object"
+      },
+      "SourceSummary": {
+        "description": "A raw source as the Library's source filter lists it.",
+        "properties": {
+          "added": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added"
+          },
+          "driver": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Driver"
+          },
+          "hash": {
+            "title": "Hash",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "hash"
+        ],
+        "title": "SourceSummary",
         "type": "object"
       },
       "ValidationError": {
@@ -716,6 +797,60 @@
               "description": "Only pages of this type",
               "title": "Type"
             }
+          },
+          {
+            "description": "Only pages citing this raw source (full hash or a prefix)",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only pages citing this raw source (full hash or a prefix)",
+              "title": "Source"
+            }
+          },
+          {
+            "description": "Only pages with this status, such as draft",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only pages with this status, such as draft",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Only pages past (or not past) stale_after",
+            "in": "query",
+            "name": "stale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only pages past (or not past) stale_after",
+              "title": "Stale"
+            }
           }
         ],
         "responses": {
@@ -852,6 +987,31 @@
         "summary": "Search",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/api/sources": {
+      "get": {
+        "operationId": "list_sources_api_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceSummary"
+                  },
+                  "title": "Response List Sources Api Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Sources",
+        "tags": [
+          "sources"
         ]
       }
     },

@@ -6,13 +6,14 @@ from pydantic import TypeAdapter
 
 from edda import _kernel
 from edda._kernel import InvalidRequestError, KernelError, NotFoundError
-from edda.models import GraphIssues, JournalEntry, Links, Page, PageSummary, SearchHit, Source
+from edda.models import GraphIssues, JournalEntry, Links, Page, PageSummary, SearchHit, Source, SourceSummary
 
 __all__ = ["InvalidRequestError", "Kernel", "KernelError", "NotFoundError"]
 
 _summaries = TypeAdapter(list[PageSummary])
 _hits = TypeAdapter(list[SearchHit])
 _entries = TypeAdapter(list[JournalEntry])
+_sources = TypeAdapter(list[SourceSummary])
 
 
 class Kernel:
@@ -47,6 +48,10 @@ class Kernel:
     def read_source(self, hash: str, start: int | None = None, end: int | None = None) -> Source:
         """A raw source by full hash or unique prefix, or lines ``start`` to ``end`` of it (1-based, inclusive)."""
         return Source.model_validate_json(self._kernel.read_source(hash, start, end))
+
+    def sources(self) -> list[SourceSummary]:
+        """Every raw source, by hash."""
+        return _sources.validate_json(self._kernel.sources())
 
     def links(self, page_id: str) -> Links:
         """A page's outgoing links and backlinks."""

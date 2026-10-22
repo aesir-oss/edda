@@ -3,6 +3,7 @@
 import os
 import time
 from collections.abc import Awaitable, Callable
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel
 from edda import okf_version
 from edda.kernel import InvalidRequestError, Kernel, NotFoundError
 from edda.log import configure_logging
-from edda.models import GraphIssues, JournalEntry, Links, Page, PageSummary, SearchHit, Source
+from edda.models import GraphIssues, JournalEntry, Links, Page, PageSummary, SearchHit, Source, SourceSummary
 
 log = structlog.get_logger("edda.api")
 
@@ -49,6 +50,25 @@ def get_kernel(request: Request) -> Kernel:
 
 
 KernelDep = Annotated[Kernel, Depends(get_kernel)]
+
+
+def get_today() -> date:
+    """Today's date in UTC, which ``stale_after`` is compared with; tests override it."""
+    return datetime.now(UTC).date()
+
+
+TodayDep = Annotated[date, Depends(get_today)]
+
+
+def is_stale(stale_after: str | None, today: date) -> bool:
+    """True when a page's ``stale_after`` date (or the date part of a timestamp) has passed."""
+    if not stale_after:
+        return False
+    try:
+        return date.fromisoformat(stale_after[:10]) < today
+    except ValueError:
+        log.warning("unreadable_stale_after", stale_after=stale_after)
+        return False
 
 
 def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastAPI:
@@ -96,11 +116,32 @@ def create_app(vault: Path | None = None, kernel: Kernel | None = None) -> FastA
     @app.get("/api/pages", tags=["pages"])
     def list_pages(
         kernel: KernelDep,
+        today: TodayDep,
         tag: Annotated[str | None, Query(description="Only pages with this tag")] = None,
         type: Annotated[str | None, Query(description="Only pages of this type")] = None,
+        source: Annotated[
+            str | None, Query(description="Only pages citing this raw source (full hash or a prefix)")
+        ] = None,
+        status: Annotated[str | None, Query(description="Only pages with this status, such as draft")] = None,
+        stale: Annotated[bool | None, Query(description="Only pages past (or not past) stale_after")] = None,
     ) -> list[PageSummary]:
-        pages = kernel.pages()
-        return [p for p in pages if (tag is None or tag in p.tags) and (type is None or p.type == type)]
+        prefix = source.lower() if source else None
+        listed = []
+        for page in kernel.pages():
+            page = page.model_copy(update={"stale": is_stale(page.stale_after, today)})
+            if (
+                (tag is None or tag in page.tags)
+                and (type is None or page.type == type)
+                and (prefix is None or any(h.startswith(prefix) for h in page.sources))
+                and (status is None or page.status == status)
+                and (stale is None or page.stale == stale)
+            ):
+                listed.append(page)
+        return listed
+
+    @app.get("/api/sources", tags=["sources"])
+    def list_sources(kernel: KernelDep) -> list[SourceSummary]:
+        return kernel.sources()
 
     @app.get("/api/pages/{page_id:path}", tags=["pages"])
     def read_page(page_id: str, kernel: KernelDep) -> Page:

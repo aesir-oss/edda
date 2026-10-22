@@ -11,17 +11,21 @@ function PageRow({ page }: { page: PageSummary }) {
       </Link>
       {page.type && <span className="badge">{page.type}</span>}
       {page.status !== 'stable' && <span className="badge badge-muted">{page.status}</span>}
+      {page.stale && <span className="badge badge-warn">stale</span>}
       {page.description && <p className="row-text">{page.description}</p>}
     </li>
   )
 }
 
-/** Browse every page, filter by tag, or search. The query and tag live in the URL so results can be linked. */
+/** Browse every page, filter by tag, source or status, or search. The filters live in the URL so a view can be linked. */
 export function Library() {
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const tag = params.get('tag') ?? ''
+  const source = params.get('source') ?? ''
+  const status = params.get('status') ?? ''
   const pages = useQuery({ queryKey: ['pages'], queryFn: () => api.pages() })
+  const sources = useQuery({ queryKey: ['sources'], queryFn: api.sources })
   const hits = useQuery({
     queryKey: ['search', q],
     queryFn: () => api.search(q),
@@ -37,7 +41,12 @@ export function Library() {
   }
 
   const tags = [...new Set((pages.data ?? []).flatMap((p) => p.tags ?? []))].sort()
-  const listed = (pages.data ?? []).filter((p) => !tag || (p.tags ?? []).includes(tag))
+  const listed = (pages.data ?? []).filter(
+    (p) =>
+      (!tag || (p.tags ?? []).includes(tag)) &&
+      (!source || (p.sources ?? []).includes(source)) &&
+      (!status || (status === 'stale' ? p.stale : p.status === status)),
+  )
 
   return (
     <section>
@@ -56,6 +65,19 @@ export function Library() {
               {t}
             </option>
           ))}
+        </select>
+        <select aria-label="Filter by source" value={source} onChange={(e) => update('source', e.target.value)}>
+          <option value="">All sources</option>
+          {(sources.data ?? []).map((s) => (
+            <option key={s.hash} value={s.hash}>
+              {s.title ?? s.hash.slice(0, 12)}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Filter by status" value={status} onChange={(e) => update('status', e.target.value)}>
+          <option value="">Any status</option>
+          <option value="draft">Draft</option>
+          <option value="stale">Stale</option>
         </select>
       </div>
 

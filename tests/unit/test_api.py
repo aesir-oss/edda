@@ -1,9 +1,11 @@
+from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from edda.api import create_app
+from edda.api.app import get_today, is_stale
 from edda.kernel import InvalidRequestError, Kernel, NotFoundError
 from edda.models import (
     BrokenLink,
@@ -16,6 +18,7 @@ from edda.models import (
     PageSummary,
     SearchHit,
     Source,
+    SourceSummary,
 )
 
 
@@ -24,15 +27,17 @@ def kernel() -> MagicMock:
     fake = MagicMock(spec=Kernel)
     fake.title = "Test vault"
     fake.pages.return_value = [
-        PageSummary(id="a.md", title="A", type="Concept", tags=["ml"], status="stable"),
-        PageSummary(id="b.md", title="B", type="Paper", tags=[], status="draft"),
+        PageSummary(id="a.md", title="A", type="Concept", tags=["ml"], status="stable", sources=["ab12" + "0" * 60]),
+        PageSummary(id="b.md", title="B", type="Paper", tags=[], status="draft", stale_after="2026-01-01"),
     ]
     return fake
 
 
 @pytest.fixture
 def client(kernel: MagicMock) -> TestClient:
-    return TestClient(create_app(kernel=kernel))
+    app = create_app(kernel=kernel)
+    app.dependency_overrides[get_today] = lambda: date(2026, 6, 1)
+    return TestClient(app)
 
 
 def test_health_and_vault(client: TestClient) -> None:
@@ -42,7 +47,17 @@ def test_health_and_vault(client: TestClient) -> None:
 
 @pytest.mark.parametrize(
     ("query", "expected"),
-    [("", ["a.md", "b.md"]), ("?tag=ml", ["a.md"]), ("?type=Paper", ["b.md"]), ("?tag=ml&type=Paper", [])],
+    [
+        ("", ["a.md", "b.md"]),
+        ("?tag=ml", ["a.md"]),
+        ("?type=Paper", ["b.md"]),
+        ("?tag=ml&type=Paper", []),
+        ("?source=AB12", ["a.md"]),
+        ("?source=ffff", []),
+        ("?status=draft", ["b.md"]),
+        ("?stale=true", ["b.md"]),
+        ("?stale=false", ["a.md"]),
+    ],
 )
 def test_lists_and_filters_pages(client: TestClient, query: str, expected: list[str]) -> None:
     assert [p["id"] for p in client.get(f"/api/pages{query}").json()] == expected
@@ -111,3 +126,31 @@ def test_without_a_vault_the_api_says_so(monkeypatch: pytest.MonkeyPatch) -> Non
     client = TestClient(create_app())
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/pages").status_code == 503
+
+
+def test_marks_stale_pages_and_lists_sources(client: TestClient, kernel: MagicMock) -> None:
+    pages = client.get("/api/pages").json()
+    assert [p["stale"] for p in pages] == [False, True]
+    kernel.sources.return_value = [SourceSummary(hash="ab12", title="Notes", driver="markdown")]
+    assert client.get("/api/sources").json() == [
+        {"hash": "ab12", "title": "Notes", "url": None, "added": None, "driver": "markdown"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("stale_after", "expected"),
+    [
+        (None, False),
+        ("", False),
+        ("2026-05-31", True),
+        ("2026-06-01", False),
+        ("2026-05-31T23:00:00Z", True),
+        ("next spring", False),
+    ],
+)
+def test_is_stale_compares_dates(stale_after: str | None, expected: bool) -> None:
+    assert is_stale(stale_after, date(2026, 6, 1)) is expected
+
+
+def test_get_today_is_a_date() -> None:
+    assert isinstance(get_today(), date)

@@ -115,6 +115,11 @@ select {
   margin-right: 6px;
 }
 
+.badge-warn {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
 .badge-muted {
   color: var(--muted);
 }

@@ -10,7 +10,7 @@ class _Model(BaseModel):
 
 
 class PageSummary(_Model):
-    """A page as the Library lists it."""
+    """A page as the Library lists it; ``sources`` are the hashes of the raw sources it cites."""
 
     id: str
     title: str
@@ -18,6 +18,19 @@ class PageSummary(_Model):
     type: str | None = None
     tags: list[str] = Field(default_factory=list)
     status: str
+    stale_after: str | None = None
+    stale: bool = False
+    sources: list[str] = Field(default_factory=list)
+
+
+class SourceSummary(_Model):
+    """A raw source as the Library's source filter lists it."""
+
+    hash: str
+    title: str | None = None
+    url: str | None = None
+    added: str | None = None
+    driver: str | None = None
 
 
 class SearchHit(_Model):
