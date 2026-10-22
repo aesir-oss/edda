@@ -52,3 +52,16 @@ def test_main_reports_outcomes(monkeypatch: pytest.MonkeyPatch, example_vault: P
 
     monkeypatch.setattr(smoke_module, "smoke", unreachable)
     assert main([]) == 1
+
+
+def test_main_can_test_another_provider(monkeypatch: pytest.MonkeyPatch, example_vault: Path) -> None:
+    chosen: list[str] = []
+
+    def record(llm: LLM) -> bool:
+        chosen.append(llm.provider_for("ingest")[0])
+        return True
+
+    monkeypatch.setattr(smoke_module, "smoke", record)
+    assert main([str(example_vault), "nvidia"]) == 0
+    assert chosen == ["nvidia"]
+    assert main([str(example_vault), "no-such-endpoint"]) == 2

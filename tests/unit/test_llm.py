@@ -8,7 +8,7 @@ import httpx2
 import pytest
 from anthropic.types.beta import BetaMessage
 
-from edda.config import AnthropicLLM, EddaConfig, LocalLLM
+from edda.config import AnthropicLLM, EddaConfig, Endpoint
 from edda.llm import (
     LLM,
     AssistantTurn,
@@ -22,13 +22,16 @@ from edda.llm import (
     UserTurn,
 )
 from edda.llm.claude import ClaudeProvider, has_credentials
-from edda.llm.local import LocalProvider
+from edda.llm.openai_compat import OpenAICompatibleProvider
 from edda.llm.types import Provider
 
 SEARCH = Tool(name="search", description="Search pages", input_schema={"type": "object", "properties": {}})
 
 
-def _local(responses: list[httpx.Response | Exception]) -> tuple[LocalProvider, list[dict[str, Any]]]:
+LOCAL = Endpoint(base_url="http://127.0.0.1:8080/v1", model="local")
+
+
+def _local(responses: list[httpx.Response | Exception]) -> tuple[OpenAICompatibleProvider, list[dict[str, Any]]]:
     sent: list[dict[str, Any]] = []
     queue = list(responses)
 
@@ -40,7 +43,7 @@ def _local(responses: list[httpx.Response | Exception]) -> tuple[LocalProvider, 
         return item
 
     client = httpx.Client(transport=httpx.MockTransport(handle))
-    return LocalProvider(LocalLLM(), client=client, retries=1), sent
+    return OpenAICompatibleProvider("local", LOCAL, client=client, retries=1), sent
 
 
 def _completion(message: dict[str, Any], finish: str = "stop") -> httpx.Response:
@@ -53,7 +56,7 @@ def _completion(message: dict[str, Any], finish: str = "stop") -> httpx.Response
 
 
 def test_local_provider_speaks_openai_compatible_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("edda.llm.local.time.sleep", lambda _: None)
+    monkeypatch.setattr("edda.llm.openai_compat.time.sleep", lambda _: None)
     call = {"id": "c1", "type": "function", "function": {"name": "search", "arguments": '{"query": "attention"}'}}
     provider, sent = _local(
         [
@@ -92,7 +95,7 @@ def test_local_provider_tolerates_bad_tool_arguments(arguments: Any) -> None:
 
 
 def test_local_provider_reports_unreachable_and_broken_servers(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("edda.llm.local.time.sleep", lambda _: None)
+    monkeypatch.setattr("edda.llm.openai_compat.time.sleep", lambda _: None)
     provider, _ = _local([httpx.Response(503), httpx.ConnectError("refused")])
     with pytest.raises(LLMError, match="is the model server running"):
         provider.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)
@@ -102,7 +105,7 @@ def test_local_provider_reports_unreachable_and_broken_servers(monkeypatch: pyte
     provider, _ = _local([httpx.Response(200, json={"choices": []})])
     with pytest.raises(LLMError, match="unexpected response"):
         provider.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)
-    assert LocalProvider(LocalLLM()).client is not None
+    assert OpenAICompatibleProvider("local", LOCAL).client is not None
 
 
 class _FakeMessages:
@@ -238,7 +241,7 @@ class _Scripted:
 
 def test_the_facade_picks_providers_per_job_and_keeps_a_ledger() -> None:
     config = EddaConfig.model_validate(
-        {"llm": {"lint": "anthropic", "local": {"model": "qwen"}}, "budgets": {"max_output_tokens": 7}}
+        {"llm": {"lint": "anthropic", "endpoints": {"local": {"model": "qwen"}}}, "budgets": {"max_output_tokens": 7}}
     )
     local, claude = _Scripted("local"), _Scripted("anthropic")
     llm = LLM(config, providers={"local": local, "anthropic": claude})
@@ -258,6 +261,74 @@ def test_the_facade_creates_providers_lazily(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("edda.llm.claude.Path.home", lambda: Path("/nonexistent"))
     llm = LLM(EddaConfig.model_validate({"llm": {"query": "anthropic"}}))
-    assert isinstance(llm._provider("local"), LocalProvider)
+    assert isinstance(llm._provider("local"), OpenAICompatibleProvider)
     with pytest.raises(ProviderNotConfigured):
         llm.chat("query", "query:1", system="s", turns=[])
+
+
+NVIDIA = Endpoint(
+    base_url="https://integrate.api.nvidia.com/v1",
+    model="nvidia/nemotron-3-ultra-550b-a55b",
+    api_key_env="NVIDIA_API_KEY",
+)
+
+
+def test_hosted_endpoints_send_the_key_from_the_environment() -> None:
+    seen: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _completion({"role": "assistant", "content": "hi"})
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    provider = OpenAICompatibleProvider("nvidia", NVIDIA, client=client, env={"NVIDIA_API_KEY": "nvapi-test"})
+    result = provider.chat(model=NVIDIA.model, system="s", turns=[UserTurn(text="q")], tools=[], max_tokens=5)
+    assert result.provider == "nvidia"
+    assert seen[0].headers["authorization"] == "Bearer nvapi-test"
+    assert str(seen[0].url) == "https://integrate.api.nvidia.com/v1/chat/completions"
+    assert json.loads(seen[0].content)["model"] == "nvidia/nemotron-3-ultra-550b-a55b"
+
+
+def test_hosted_endpoints_need_a_key_and_https() -> None:
+    with pytest.raises(ProviderNotConfigured, match="your own API key in NVIDIA_API_KEY"):
+        OpenAICompatibleProvider("nvidia", NVIDIA, env={})
+    plain = Endpoint(base_url="http://models.example.net/v1", model="m", api_key_env="KEY")
+    with pytest.raises(ProviderNotConfigured, match=r"plain HTTP to models\.example\.net"):
+        OpenAICompatibleProvider("remote", plain, env={"KEY": "k"})
+    loopback = Endpoint(base_url="http://localhost:11434/v1", model="m", api_key_env="KEY")
+    assert OpenAICompatibleProvider("ollama", loopback, env={"KEY": "k"}).client.headers["authorization"] == "Bearer k"
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_says_so(status: int) -> None:
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(status, text="denied")))
+    provider = OpenAICompatibleProvider("nvidia", NVIDIA, client=client, env={"NVIDIA_API_KEY": "bad"}, retries=0)
+    with pytest.raises(ProviderNotConfigured, match=f"rejected the API key \\(HTTP {status}\\)"):
+        provider.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)
+
+
+def test_hosted_endpoints_do_not_blame_a_local_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("edda.llm.openai_compat.time.sleep", lambda _: None)
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    provider = OpenAICompatibleProvider("nvidia", NVIDIA, client=client, env={"NVIDIA_API_KEY": "k"}, retries=0)
+    with pytest.raises(LLMError) as raised:
+        provider.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)
+    assert "model server running" not in str(raised.value)
+
+
+def test_the_facade_routes_jobs_to_named_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = EddaConfig.model_validate({"llm": {"ingest": "nvidia"}})
+    assert LLM(config).provider_for("ingest") == ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b")
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    with pytest.raises(ProviderNotConfigured, match="NVIDIA_API_KEY"):
+        LLM(config).chat("ingest", "ingest:1", system="s", turns=[])
+
+
+def test_a_model_missing_from_a_hosted_account_says_so() -> None:
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404, text="Function not found")))
+    provider = OpenAICompatibleProvider("nvidia", NVIDIA, client=client, env={"NVIDIA_API_KEY": "k"}, retries=0)
+    with pytest.raises(ProviderNotConfigured, match="no model 'nvidia/x' for this account"):
+        provider.chat(model="nvidia/x", system="s", turns=[], tools=[], max_tokens=5)
+    local, _ = _local([httpx.Response(404, text="no such route")])
+    with pytest.raises(LLMError, match="HTTP 404: no such route"):
+        local.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)

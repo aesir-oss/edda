@@ -54,11 +54,25 @@ pixi run llm-smoke            # one tool-calling round trip against the configur
 ```
 
 `pixi run -e llm llm-serve <model file> <port> <context>` changes the defaults. Ollama, mlx-lm or LM Studio work too:
-point `[llm.local] base_url` in `edda.toml` at their OpenAI-compatible endpoint.
+add them under `[llm.endpoints]` in `edda.toml` with their OpenAI-compatible `base_url`.
 
-To use Claude for a job instead, set it to `"anthropic"` under `[llm]` in `edda.toml` and supply your own API key in the
-environment (`ANTHROPIC_API_KEY`, or `ant auth login`). You pay Anthropic for what it uses; the key never goes in the
-vault. Claude's context is much larger than a local model's, so raise `[budgets]` for those jobs.
+### Hosted models, with your own key
+
+Each job in `[llm]` names an endpoint or `anthropic`. Hosted models send your sources off the machine, and keys come
+from the environment, never from `edda.toml` or the vault.
+
+| Provider | Set a job to | Key | Model |
+|---|---|---|---|
+| NVIDIA (Nemotron) | `"nvidia"` | `NVIDIA_API_KEY`, from build.nvidia.com | `nvidia/nemotron-3-ultra-550b-a55b`; `nvidia/nemotron-3.5-lightning-30b-a3b` is faster. Which models an account can call varies |
+| Anthropic (Claude) | `"anthropic"` | `ANTHROPIC_API_KEY`, or `ant auth login` | Sonnet 5.5, Opus 5.5 or Haiku 5.5 per job |
+
+```sh
+export NVIDIA_API_KEY=...
+pixi run llm-smoke examples/vault nvidia   # check the endpoint before setting a job to it
+```
+
+Hosted models have much larger contexts than a local one, so raise `[budgets]` for those jobs; Anthropic bills by the
+token, and NVIDIA's terms and rate limits are theirs to set.
 
 ## Development
 

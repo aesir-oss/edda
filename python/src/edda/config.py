@@ -6,21 +6,38 @@ never breaks a vault; an unknown key is an error, so a typo does not silently fa
 
 import tomllib
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError, field_validator, model_validator
 
 
 class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class LocalLLM(_Section):
-    """A local model server with an OpenAI-compatible chat-completions API (llama.cpp's llama-server by default)."""
+class Endpoint(_Section):
+    """An OpenAI-compatible chat-completions endpoint: a local model server, or a hosted one such as NVIDIA's.
 
-    base_url: str = "http://127.0.0.1:8080/v1"
-    model: str = "local"
+    ``api_key_env`` names the environment variable that holds the endpoint's key; the key itself never goes in
+    ``edda.toml``. An endpoint without one is called without authentication, as local servers expect.
+    """
+
+    base_url: str
+    model: str
+    api_key_env: str | None = None
     timeout_seconds: PositiveInt = 600
+
+
+def _default_endpoints() -> dict[str, dict[str, Any]]:
+    return {
+        "local": {"base_url": "http://127.0.0.1:8080/v1", "model": "local"},
+        "nvidia": {
+            "base_url": "https://integrate.api.nvidia.com/v1",
+            "model": "nvidia/nemotron-3-ultra-550b-a55b",
+            "api_key_env": "NVIDIA_API_KEY",
+            "timeout_seconds": 300,
+        },
+    }
 
 
 class AnthropicLLM(_Section):
@@ -35,19 +52,43 @@ class AnthropicLLM(_Section):
 
 
 class LLMConfig(_Section):
-    """Which provider each job uses.
+    """Which provider each job uses: the name of an endpoint, or ``anthropic``.
 
-    ``local`` is the default: free, and nothing leaves the machine. ``anthropic`` needs the person's own API key, and
-    they pay for it.
+    ``local`` is the default: free, and nothing leaves the machine. ``nvidia`` is NVIDIA's hosted Nemotron and
+    ``anthropic`` is Claude; both need the person's own key in the environment, and send sources off the machine.
+    Endpoints given in ``edda.toml`` are merged over the built-in ``local`` and ``nvidia`` ones, key by key.
     """
 
-    ingest: Literal["local", "anthropic"] = "local"
-    query: Literal["local", "anthropic"] = "local"
-    lint: Literal["local", "anthropic"] = "local"
-    research: Literal["local", "anthropic"] = "local"
-    summary: Literal["local", "anthropic"] = "local"
-    local: LocalLLM = Field(default_factory=LocalLLM)
+    ingest: str = "local"
+    query: str = "local"
+    lint: str = "local"
+    research: str = "local"
+    summary: str = "local"
+    endpoints: dict[str, Endpoint] = Field(default_factory=lambda: _endpoints({}))
     anthropic: AnthropicLLM = Field(default_factory=AnthropicLLM)
+
+    @field_validator("endpoints", mode="before")
+    @classmethod
+    def _merge_defaults(cls, value: Any) -> Any:
+        return _endpoints(value) if isinstance(value, dict) else value
+
+    @model_validator(mode="after")
+    def _known_providers(self) -> "LLMConfig":
+        if "anthropic" in self.endpoints:
+            raise ValueError("'anthropic' is a provider, not an endpoint name")
+        for job in ("ingest", "query", "lint", "research", "summary"):
+            name = getattr(self, job)
+            if name != "anthropic" and name not in self.endpoints:
+                known = ", ".join(sorted([*self.endpoints, "anthropic"]))
+                raise ValueError(f"llm.{job} = {name!r} is not an endpoint or provider; known: {known}")
+        return self
+
+
+def _endpoints(given: dict[str, Any]) -> dict[str, Endpoint]:
+    merged = _default_endpoints()
+    for name, fields in given.items():
+        merged[name] = {**merged.get(name, {}), **(fields if isinstance(fields, dict) else {})}
+    return {name: Endpoint.model_validate(fields) for name, fields in merged.items()}
 
 
 class Budgets(_Section):

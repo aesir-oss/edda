@@ -65,10 +65,12 @@ only exists after it merges.
 
 ## Models
 
-- Jobs use a local model by default: any OpenAI-compatible endpoint (llama.cpp's `llama-server`, Ollama, mlx-lm),
-  set in `[llm.local]` in `edda.toml`. A job set to `anthropic` in `[llm]` uses Claude, and only with the person's own
-  credentials (`ANTHROPIC_API_KEY` or an `ant auth login` profile). Never put a key in `edda.toml`, the vault, a test
-  or a log, and never fall back from one provider to the other silently.
+- Each job in `[llm]` names an OpenAI-compatible endpoint from `[llm.endpoints]` or `anthropic`. Built in: `local`
+  (llama.cpp's `llama-server`, the default) and `nvidia` (hosted Nemotron, key in `NVIDIA_API_KEY`); endpoints given in
+  `edda.toml` merge over them. Claude needs the person's own credentials (`ANTHROPIC_API_KEY` or an `ant auth login`
+  profile). An endpoint names the variable holding its key (`api_key_env`), never the key. Never put a key in
+  `edda.toml`, the vault, a test or a log, never send one over plain HTTP off the machine, and never fall back from one
+  provider to another silently.
 - The local default is Qwen3-14B (official Qwen GGUF, 4-bit) served by `pixi run -e llm llm-serve`. Weights are
   downloaded by `pixi run llm-fetch`, verified against the SHA-256 pinned in `edda.llm.models`, and kept in
   `~/.cache/edda/models`; never commit them. Adding a model to `KNOWN` needs the owner's approval of the model and
