@@ -327,11 +327,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "edda-kernel"
+version = "0.1.0"
+dependencies = [
+ "edda-journal",
+ "edda-store",
+ "jiff",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "edda-py"
 version = "0.1.0"
 dependencies = [
  "edda-index",
  "edda-journal",
+ "edda-kernel",
  "edda-store",
  "pyo3",
  "serde",

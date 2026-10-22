@@ -69,3 +69,43 @@ def test_refuses_bad_proposals(vault_copy: Path) -> None:
     proposal = kernel.propose_edit("j", "bm25.md", 1, [TextEdit(old="orphan.", new="orphan. More.")], "r")
     with pytest.raises(InvalidRequestError, match="not in the text"):
         kernel.cite(proposal.id, "absent", PAPER, "p1")
+
+
+def test_accepting_applies_the_change_and_refreshes_search(vault_copy: Path) -> None:
+    kernel = Kernel(vault_copy)
+    edits = [TextEdit(old="orphan.", new="orphan. Zebras graze in herds.")]
+    proposal = kernel.propose_edit("ingest:test", "bm25.md", 1, edits, "adds zebras")
+    kernel.cite(proposal.id, "graze in herds.", PAPER, "Section 6")
+    assert kernel.search("zebras") == []
+
+    entry = kernel.accept(proposal.id)
+    assert (entry.action, entry.rev, entry.summary) == ("edit_page", 2, "adds zebras")
+    page = kernel.read_page("bm25.md")
+    assert page.rev == 2
+    assert page.frontmatter["generated"]["by"] == "ingest:test"
+    assert page.frontmatter["verified"][0]["by"] == "owner"
+    assert page.frontmatter["status"] == "stable"
+    assert kernel.search("zebras")[0].id == "bm25.md"
+    assert kernel.proposal(proposal.id).status == "accepted"
+    assert kernel.verify_journal() == 9
+    assert "adds zebras" in (vault_copy / "wiki" / "log.md").read_text(encoding="utf-8")
+
+
+def test_conflicts_blocks_and_rejections(vault_copy: Path) -> None:
+    kernel = Kernel(vault_copy)
+    first = kernel.propose_edit("owner", "bm25.md", 1, [TextEdit(old="orphan.", new="orphan, for now.")], "mine")
+    second = kernel.propose_edit("owner", "bm25.md", 1, [TextEdit(old="orphan.", new="orphan!")], "also mine")
+    kernel.accept(first.id)
+    with pytest.raises(ConflictError):
+        kernel.accept(second.id)
+
+    uncited = kernel.propose_edit(
+        "ingest:test", "transformer.md", 1, [TextEdit(old="encodings.", new="encodings. Uncited.")], "r"
+    )
+    with pytest.raises(InvalidRequestError, match="cites no source"):
+        kernel.accept(uncited.id)
+    entry = kernel.reject(uncited.id, "not in the source")
+    assert entry.action == "reject_proposal"
+    assert kernel.proposal(uncited.id).status == "rejected"
+    with pytest.raises(InvalidRequestError, match="no longer pending"):
+        kernel.accept(uncited.id)
