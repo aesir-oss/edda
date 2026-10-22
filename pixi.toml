@@ -111,6 +111,7 @@ llm-smoke = { args = [
   { arg = "vault", default = "examples/vault" },
   { arg = "provider", default = "" },
 ], cmd = "python -m edda.llm.smoke {{ vault }} {{ provider }}" }
+ingest = { args = ["vault", "source"], cmd = "python -m edda.jobs.ingest {{ vault }} {{ source }}", description = "run the ingest job on one raw source: ingest <vault> <source hash or prefix>" }
 llm-fetch = { args = [{ arg = "name", default = "qwen3-14b" }], cmd = "python -m edda.llm.models {{ name }}" }
 
 changelog = "git cliff -o CHANGELOG.md"
