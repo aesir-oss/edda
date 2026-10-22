@@ -8,6 +8,7 @@ export type Links = Schemas['Links']
 export type VaultInfo = Schemas['VaultInfo']
 export type Citation = Schemas['Citation']
 export type SourceSummary = Schemas['SourceSummary']
+export type AddedSource = Schemas['AddedSource']
 
 export class ApiError extends Error {
   readonly status: number
@@ -18,13 +19,15 @@ export class ApiError extends Error {
   }
 }
 
-async function get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+type Params = Record<string, string | number | undefined>
+
+async function request<T>(path: string, params: Params = {}, init: RequestInit = {}): Promise<T> {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') query.set(key, String(value))
   }
   const url = query.size ? `${path}?${query}` : path
-  const response = await fetch(url, { headers: { Accept: 'application/json' } })
+  const response = await fetch(url, { ...init, headers: { Accept: 'application/json', ...init.headers } })
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
     const detail = typeof body.detail === 'string' ? body.detail : response.statusText
@@ -37,10 +40,16 @@ async function get<T>(path: string, params: Record<string, string | number | und
 const pagePath = (id: string) => id.split('/').map(encodeURIComponent).join('/')
 
 export const api = {
-  vault: () => get<VaultInfo>('/api/vault'),
-  pages: (filter: { tag?: string; type?: string } = {}) => get<PageSummary[]>('/api/pages', filter),
-  sources: () => get<SourceSummary[]>('/api/sources'),
-  page: (id: string) => get<Page>(`/api/pages/${pagePath(id)}`),
-  links: (id: string) => get<Links>(`/api/links/${pagePath(id)}`),
-  search: (q: string, k = 20) => get<SearchHit[]>('/api/search', { q, k }),
+  vault: () => request<VaultInfo>('/api/vault'),
+  pages: (filter: { tag?: string; type?: string } = {}) => request<PageSummary[]>('/api/pages', filter),
+  sources: () => request<SourceSummary[]>('/api/sources'),
+  importMarkdown: (file: File) =>
+    request<AddedSource>(
+      '/api/sources/markdown',
+      { filename: file.name },
+      { method: 'POST', body: file, headers: { 'Content-Type': 'text/markdown' } },
+    ),
+  page: (id: string) => request<Page>(`/api/pages/${pagePath(id)}`),
+  links: (id: string) => request<Links>(`/api/links/${pagePath(id)}`),
+  search: (q: string, k = 20) => request<SearchHit[]>('/api/search', { q, k }),
 }

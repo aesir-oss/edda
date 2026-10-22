@@ -187,3 +187,10 @@ class Proposal(_Model):
     rationale: str
     status: Literal["pending", "accepted", "rejected"]
     preview: ProposalPreview
+
+
+class AddedSource(_Model):
+    """A source after an import; ``added`` is false when the same bytes were already stored."""
+
+    source: SourceSummary
+    added: bool

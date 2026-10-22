@@ -7,7 +7,9 @@ use std::sync::RwLock;
 
 use edda_index::{Index, IndexError};
 use edda_journal::{Journal, JournalError};
-use edda_store::{Change, PageId, Proposal, RawEntry, Resource, StoreError, TextEdit, Vault};
+use edda_store::{
+    Change, PageId, Proposal, RawEntry, RawMeta, Resource, StoreError, TextEdit, Vault,
+};
 use pyo3::create_exception;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
@@ -398,6 +400,40 @@ impl Kernel {
             note: note.to_owned(),
         };
         py.detach(|| self.proposal_json(&self.vault.propose(job, change, note).map_err(store_err)?))
+    }
+
+    /// Stores a raw source and journals it, then refreshes the index. Returns the source and whether it was new.
+    #[pyo3(signature = (data, extension = None, title = None, url = None, driver = None, by = "owner"))]
+    #[allow(clippy::too_many_arguments)]
+    fn add_source(
+        &self,
+        py: Python<'_>,
+        data: &[u8],
+        extension: Option<&str>,
+        title: Option<String>,
+        url: Option<String>,
+        driver: Option<String>,
+        by: &str,
+    ) -> PyResult<String> {
+        let meta = RawMeta {
+            title,
+            url,
+            driver,
+            ..RawMeta::default()
+        };
+        py.detach(|| {
+            let added =
+                edda_kernel::add_source(&self.vault, data, extension, &meta, by).map_err(gate_err)?;
+            if added.entry.is_some() {
+                let fresh = Index::open(&self.vault).map_err(index_err)?;
+                *self.index.write().map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
+            }
+            let m = &added.source.meta;
+            to_json(&json!({
+                "source": {"hash": added.source.hash, "title": m.title, "url": m.url, "added": m.added, "driver": m.driver},
+                "added": added.entry.is_some(),
+            }))
+        })
     }
 
     /// Accepts a pending proposal on behalf of `by` and applies it, then refreshes the index. Returns the journal entry.

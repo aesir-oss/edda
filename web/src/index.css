@@ -180,3 +180,17 @@ aside h2 {
   display: flex;
   gap: 16px;
 }
+
+.add-source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.button {
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--surface);
+}

@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router'
 import { api, type PageSummary } from './api/client'
+import { AddSource } from './AddSource'
 import { ErrorNotice } from './ErrorNotice'
 
 function PageRow({ page }: { page: PageSummary }) {
@@ -79,6 +80,7 @@ export function Library() {
           <option value="draft">Draft</option>
           <option value="stale">Stale</option>
         </select>
+        <AddSource />
       </div>
 
       {q.trim() ? (

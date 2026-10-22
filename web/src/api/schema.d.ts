@@ -157,6 +157,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Markdown Source
+         * @description Stores the request body, a Markdown file, unedited as a raw source.
+         */
+        post: operations["import_markdown_source_api_sources_markdown_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/{source_hash}": {
         parameters: {
             query?: never;
@@ -195,6 +215,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AddedSource
+         * @description A source after an import; ``added`` is false when the same bytes were already stored.
+         */
+        AddedSource: {
+            /** Added */
+            added: boolean;
+            source: components["schemas"]["SourceSummary"];
+        };
         /**
          * BrokenLink
          * @description A link to a page that does not exist.
@@ -668,6 +697,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceSummary"][];
+                };
+            };
+        };
+    };
+    import_markdown_source_api_sources_markdown_post: {
+        parameters: {
+            query?: {
+                /** @description The file's name, the title of last resort */
+                filename?: string | null;
+                /** @description Where the file came from, if anywhere */
+                url?: string | null;
+                /** @description Overrides the title read from the file */
+                title?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "text/markdown": string;
+            };
+        };
+        responses: {
+            /** @description The same bytes were already stored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedSource"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddedSource"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
