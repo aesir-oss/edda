@@ -10,22 +10,24 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts)$
+        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts|_bmad/.*|\.claude/skills/.*)$
       - id: trailing-whitespace
-        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts)$
+        exclude: ^(pixi\.lock|web/package-lock\.json|web/src/api/schema\.d\.ts|_bmad/.*|\.claude/skills/.*)$
       - id: check-yaml
+        exclude: ^(_bmad|\.claude/skills)/
       - id: check-toml
+        exclude: ^(_bmad|\.claude/skills)/
       - id: check-merge-conflict
   - repo: local
     hooks:
       - id: ruff
         name: ruff
-        entry: pixi run ruff check --fix
+        entry: pixi run ruff check --fix --force-exclude
         language: system
         types: [python]
       - id: ruff-format
         name: ruff-format
-        entry: pixi run ruff format
+        entry: pixi run ruff format --force-exclude
         language: system
         types: [python]
       - id: mypy
