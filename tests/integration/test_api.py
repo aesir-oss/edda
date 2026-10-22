@@ -63,3 +63,33 @@ def test_filters_the_example_vault_by_source_status_and_staleness(client: TestCl
         "BM25 in one page",
         "Notes on Attention Is All You Need",
     ]
+
+
+def test_a_job_proposes_and_the_owner_revises_and_accepts_over_http(vault_copy: Path) -> None:
+    from edda.kernel import Kernel
+    from edda.models import TextEdit
+
+    def ingest(kernel: Kernel, source: str) -> list[str]:
+        edits = [TextEdit(old="orphan.", new="orphan. Zebras graze in herds.")]
+        proposal = kernel.propose_edit("ingest:test", "bm25.md", 1, edits, "adds zebras")
+        kernel.cite(proposal.id, "graze in herds.", source, "Section 6")
+        return [proposal.id]
+
+    app = create_app(vault=vault_copy, ingest=ingest)
+    heard: list[tuple[str, dict[str, object]]] = []
+    app.state.events.publish = lambda event, data: heard.append((event, data))
+    client = TestClient(app)
+    run = client.post("/api/jobs/ingest", json={"source": "d9ca93c3"}).json()
+    app.state.jobs.wait(5)
+    [proposal_id] = client.get(f"/api/jobs/{run['id']}").json()["proposals"]
+    pending = client.get("/api/proposals", params={"status": "pending"}).json()
+    assert [p["id"] for p in pending] == [proposal_id]
+
+    revised = [{"old": "orphan.", "new": "orphan. Wild zebras graze in herds."}]
+    decision = client.post(f"/api/proposals/{proposal_id}/accept", json={"edits": revised}).json()
+    assert decision["revised_from"] == proposal_id
+    assert "Wild zebras" in client.get("/api/pages/bm25.md").json()["body"]
+    assert client.post(f"/api/proposals/{proposal_id}/accept").status_code == 400
+    assert [e for e, _ in heard if e == "job"] == ["job", "job", "job"]
+    decided = [(d["id"], d["status"]) for e, d in heard if e == "proposal" and d["job"] is None]
+    assert decided == [(decision["proposal"]["id"], "accepted"), (proposal_id, "rejected")]

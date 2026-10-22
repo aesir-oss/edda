@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Event Stream
+         * @description ``proposal``, ``source``, ``page`` and ``job`` events as the vault changes, after a ``ready`` event.
+         */
+        get: operations["event_stream_api_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/graph/issues": {
         parameters: {
             query?: never;
@@ -72,6 +92,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Jobs */
+        get: operations["list_jobs_api_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/ingest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Ingest
+         * @description Queues the ingest job for a raw source; its proposals arrive as events while it runs.
+         */
+        post: operations["start_ingest_api_jobs_ingest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Job */
+        get: operations["read_job_api_jobs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/links/{page_id}": {
         parameters: {
             query?: never;
@@ -117,6 +191,77 @@ export interface paths {
         get: operations["read_page_api_pages__page_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Proposals */
+        get: operations["list_proposals_api_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Proposal */
+        get: operations["read_proposal_api_proposals__proposal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Proposal
+         * @description Applies a proposal, or the owner's revision of it (``edits`` for an edit, ``page`` for a new page).
+         */
+        post: operations["accept_proposal_api_proposals__proposal_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Proposal */
+        post: operations["reject_proposal_api_proposals__proposal_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -216,6 +361,15 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AcceptRequest
+         * @description Accept a proposal as it is, or after the owner revised it: ``edits`` for an edit, ``page`` for a new page.
+         */
+        AcceptRequest: {
+            /** Edits */
+            edits?: components["schemas"]["TextEdit"][] | null;
+            page?: components["schemas"]["PageRevision"] | null;
+        };
+        /**
          * AddedSource
          * @description A source after an import; ``added`` is false when the same bytes were already stored.
          */
@@ -253,6 +407,50 @@ export interface components {
             title?: string | null;
         };
         /**
+         * Decision
+         * @description The decided proposal, the journal entry the kernel wrote, and the proposal it revised, if any.
+         */
+        Decision: {
+            entry: components["schemas"]["JournalEntry"];
+            proposal: components["schemas"]["Proposal"];
+            /** Revised From */
+            revised_from?: string | null;
+        };
+        /**
+         * EditChange
+         * @description ``propose_edit``: text edits to an existing page, made against revision ``base_rev``.
+         */
+        EditChange: {
+            /** Base Rev */
+            base_rev: number;
+            /** Edits */
+            edits: components["schemas"]["TextEdit"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "edit";
+            /** Page */
+            page: string;
+        };
+        /**
+         * FlagChange
+         * @description ``flag``: a contradiction, outdated claim or gap, for review. It changes no text.
+         */
+        FlagChange: {
+            /** Flag */
+            flag: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "flag";
+            /** Note */
+            note: string;
+            /** Page */
+            page: string;
+        };
+        /**
          * GraphIssues
          * @description Pages nothing links to, and links to pages that do not exist.
          */
@@ -274,6 +472,41 @@ export interface components {
         Health: {
             /** Status */
             status: string;
+        };
+        /**
+         * IngestRequest
+         * @description The raw source to ingest, by full hash or unique prefix.
+         */
+        IngestRequest: {
+            /** Source */
+            source: string;
+        };
+        /**
+         * JobRun
+         * @description A job started from the API and where it stands.
+         */
+        JobRun: {
+            /** Error */
+            error?: string | null;
+            /** Finished */
+            finished?: string | null;
+            /** Id */
+            id: string;
+            /** Job */
+            job: string;
+            /** Proposals */
+            proposals?: string[];
+            /** Queued */
+            queued: string;
+            /** Started */
+            started?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "done" | "failed";
+            /** Target */
+            target: string;
         };
         /**
          * JournalEntry
@@ -312,6 +545,29 @@ export interface components {
             outgoing: components["schemas"]["OutLink"][];
         };
         /**
+         * NewPageChange
+         * @description ``propose_page``: a new page, created as a draft.
+         */
+        NewPageChange: {
+            /** Body */
+            body: string;
+            /** Description */
+            description: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "new_page";
+            /** Page */
+            page: string;
+            /** Tags */
+            tags?: string[];
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        };
+        /**
          * OutLink
          * @description A link out of a page; ``target`` is the page id for links inside the bundle.
          */
@@ -346,6 +602,20 @@ export interface components {
             title: string;
         };
         /**
+         * PageRevision
+         * @description The owner's changes to a proposed new page; fields left out keep the model's text.
+         */
+        PageRevision: {
+            /** Body */
+            body?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Tags */
+            tags?: string[] | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
          * PageSummary
          * @description A page as the Library lists it; ``sources`` are the hashes of the raw sources it cites.
          */
@@ -371,6 +641,66 @@ export interface components {
             title: string;
             /** Type */
             type?: string | null;
+        };
+        /**
+         * Proposal
+         * @description A change a job (or the owner) submitted, waiting for review.
+         */
+        Proposal: {
+            /** Change */
+            change: components["schemas"]["EditChange"] | components["schemas"]["NewPageChange"] | components["schemas"]["FlagChange"];
+            /** Citations */
+            citations?: components["schemas"]["ProposalCitation"][];
+            /** Created */
+            created: string;
+            /** Id */
+            id: string;
+            /** Job */
+            job: string;
+            preview: components["schemas"]["ProposalPreview"];
+            /** Rationale */
+            rationale: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+        };
+        /**
+         * ProposalCitation
+         * @description A claim in a proposal's added text, backed by a span of a raw source.
+         */
+        ProposalCitation: {
+            /** Claim */
+            claim: string;
+            /** Id */
+            id: string;
+            /** Locator */
+            locator: string;
+            /** Raw */
+            raw: string;
+            /** Resource */
+            resource: string;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * ProposalPreview
+         * @description What accepting the proposal would do, and the kernel rules that keep it from being applied.
+         */
+        ProposalPreview: {
+            /** Diff */
+            diff: string;
+            /** Issues */
+            issues: string[];
+        };
+        /**
+         * RejectRequest
+         * @description Why the owner turned a proposal down.
+         */
+        RejectRequest: {
+            /** Reason */
+            reason: string;
         };
         /**
          * SearchHit
@@ -422,6 +752,16 @@ export interface components {
             /** Url */
             url?: string | null;
         };
+        /**
+         * TextEdit
+         * @description Replace ``old``, which must appear exactly once in the page body, with ``new``.
+         */
+        TextEdit: {
+            /** New */
+            new: string;
+            /** Old */
+            old: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -456,6 +796,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    event_stream_api_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+        };
+    };
     graph_issues_api_graph_issues_get: {
         parameters: {
             query?: never;
@@ -542,6 +902,90 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    list_jobs_api_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRun"][];
+                };
+            };
+        };
+    };
+    start_ingest_api_jobs_ingest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IngestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_job_api_jobs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
@@ -634,6 +1078,146 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_proposals_api_proposals_get: {
+        parameters: {
+            query?: {
+                /** @description Only proposals in this state, such as pending */
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_proposal_api_proposals__proposal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Proposal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_proposal_api_proposals__proposal_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AcceptRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
+                };
+            };
+            /** @description The page changed since the proposal was made */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_proposal_api_proposals__proposal_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"];
                 };
             };
             /** @description Validation Error */

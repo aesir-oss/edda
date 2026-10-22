@@ -1,6 +1,9 @@
-"""Typed access to the kernel's read-side system calls."""
+"""Typed access to the kernel's system calls."""
 
+import threading
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from pydantic import TypeAdapter
 
@@ -31,9 +34,15 @@ _proposals = TypeAdapter(list[Proposal])
 _edits = TypeAdapter(list[TextEdit])
 _related = TypeAdapter(list[Related])
 
+Listener = Callable[[str, dict[str, Any]], None]
+
 
 class Kernel:
-    """A vault opened for reading. Opening it builds or refreshes ``.edda/index``."""
+    """A vault opened for reading and writing. Opening it builds or refreshes ``.edda/index``.
+
+    Writes made through one ``Kernel`` run one at a time, and each is reported to the listeners added with
+    ``listen`` as an event name (``proposal``, ``source`` or ``page``) and a small payload.
+    """
 
     def __init__(self, vault: Path) -> None:
         """Opens the vault at ``vault``.
@@ -43,6 +52,27 @@ class Kernel:
         """
         self.vault = vault
         self._kernel = _kernel.Kernel(str(vault))
+        self.writes = threading.RLock()
+        self._listeners: list[Listener] = []
+
+    def listen(self, listener: Listener) -> None:
+        """Calls ``listener(event, data)`` after every write made through this kernel."""
+        self._listeners.append(listener)
+
+    def _emit(self, event: str, data: dict[str, Any]) -> None:
+        for listener in self._listeners:
+            listener(event, data)
+
+    def _proposed(self, proposal: Proposal) -> Proposal:
+        self._emit(
+            "proposal",
+            {"id": proposal.id, "status": proposal.status, "page": proposal.change.page, "job": proposal.job},
+        )
+        return proposal
+
+    def _decided(self, proposal_id: str, status: str, entry: JournalEntry) -> JournalEntry:
+        self._emit("proposal", {"id": proposal_id, "status": status, "page": entry.page, "job": None})
+        return entry
 
     @property
     def title(self) -> str:
@@ -85,7 +115,9 @@ class Kernel:
             InvalidRequestError: An edit's ``old`` text does not appear exactly once.
         """
         edits_json = _edits.dump_json(edits).decode()
-        return Proposal.model_validate_json(self._kernel.propose_edit(job, page_id, base_rev, edits_json, rationale))
+        with self.writes:
+            raw = self._kernel.propose_edit(job, page_id, base_rev, edits_json, rationale)
+        return self._proposed(Proposal.model_validate_json(raw))
 
     def propose_page(
         self,
@@ -104,8 +136,9 @@ class Kernel:
         Raises:
             InvalidRequestError: The page already exists, or its id is not valid.
         """
-        raw = self._kernel.propose_page(job, page_id, type, title, description, tags or [], body, rationale)
-        return Proposal.model_validate_json(raw)
+        with self.writes:
+            raw = self._kernel.propose_page(job, page_id, type, title, description, tags or [], body, rationale)
+        return self._proposed(Proposal.model_validate_json(raw))
 
     def cite(self, proposal_id: str, claim: str, source: str, locator: str, source_id: str | None = None) -> Proposal:
         """``cite``: back ``claim``, text the proposal adds, with ``locator`` in the raw source ``source``.
@@ -114,11 +147,15 @@ class Kernel:
             InvalidRequestError: The claim is not in the added text, or the proposal is no longer pending.
             NotFoundError: No raw source or proposal by that name.
         """
-        return Proposal.model_validate_json(self._kernel.cite(proposal_id, claim, source, locator, source_id))
+        with self.writes:
+            raw = self._kernel.cite(proposal_id, claim, source, locator, source_id)
+        return self._proposed(Proposal.model_validate_json(raw))
 
     def flag(self, job: str, page_id: str, kind: str, note: str) -> Proposal:
         """``flag``: report a contradiction, outdated claim or gap on a page, for review."""
-        return Proposal.model_validate_json(self._kernel.flag(job, page_id, kind, note))
+        with self.writes:
+            raw = self._kernel.flag(job, page_id, kind, note)
+        return self._proposed(Proposal.model_validate_json(raw))
 
     def add_source(
         self,
@@ -134,8 +171,11 @@ class Kernel:
 
         Adding bytes that are already stored changes nothing and returns the stored source with ``added`` false.
         """
-        raw = self._kernel.add_source(data, extension, title, url, driver, by)
-        return AddedSource.model_validate_json(raw)
+        with self.writes:
+            raw = self._kernel.add_source(data, extension, title, url, driver, by)
+        added = AddedSource.model_validate_json(raw)
+        self._emit("source", {"hash": added.source.hash, "added": added.added})
+        return added
 
     def accept(self, proposal_id: str, by: str = "owner") -> JournalEntry:
         """Accepts a pending proposal on behalf of ``by`` and applies it; returns the journal entry it wrote.
@@ -144,11 +184,15 @@ class Kernel:
             ConflictError: The page changed since the proposal's base revision.
             InvalidRequestError: The proposal is not pending, or breaks a kernel rule (such as uncited text).
         """
-        return JournalEntry.model_validate_json(self._kernel.accept(proposal_id, by))
+        with self.writes:
+            entry = JournalEntry.model_validate_json(self._kernel.accept(proposal_id, by))
+        return self._decided(proposal_id, "accepted", entry)
 
     def reject(self, proposal_id: str, reason: str, by: str = "owner") -> JournalEntry:
         """Rejects a pending proposal; the page is untouched. Returns the journal entry it wrote."""
-        return JournalEntry.model_validate_json(self._kernel.reject(proposal_id, reason, by))
+        with self.writes:
+            entry = JournalEntry.model_validate_json(self._kernel.reject(proposal_id, reason, by))
+        return self._decided(proposal_id, "rejected", entry)
 
     def rollback(self, page_id: str, rev: int, by: str = "owner") -> JournalEntry:
         """Restores a page to an earlier revision the kernel wrote; the restored text becomes a new revision.
@@ -156,7 +200,10 @@ class Kernel:
         Raises:
             NotFoundError: The journal has no stored content for that revision, or it is the current one.
         """
-        return JournalEntry.model_validate_json(self._kernel.rollback(page_id, rev, by))
+        with self.writes:
+            entry = JournalEntry.model_validate_json(self._kernel.rollback(page_id, rev, by))
+        self._emit("page", {"id": entry.page, "rev": entry.rev})
+        return entry
 
     def proposals(self) -> list[Proposal]:
         """Every proposal with its preview, oldest first."""
