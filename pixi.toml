@@ -89,9 +89,19 @@ build-py = "maturin build --release --out dist"
 build-web = { cmd = "npm run build", cwd = "web", depends-on = ["web-install"] }
 build = { depends-on = ["build-rust", "build-py", "build-web"] }
 
+# The API's OpenAPI schema and the web app's TypeScript types generated from it; a test fails when either is stale.
+gen-api = { cmd = "python -m edda.api.openapi web/openapi.json && npm --prefix web run gen-api", depends-on = [
+  "native",
+  "web-install",
+] }
+
+api-drift = { cmd = "git diff --exit-code -- web/openapi.json web/src/api/schema.d.ts", depends-on = [
+  "gen-api",
+] }
+
 changelog = "git cliff -o CHANGELOG.md"
 pre-commit-run = "pre-commit run --all-files"
-ci = { depends-on = ["pre-commit-run", "build", "check", "lint", "cov"] }
+ci = { depends-on = ["pre-commit-run", "build", "check", "lint", "api-drift", "cov"] }
 
 # The API on :8000 and the Vite dev server on :5173, which proxies /api to it. EDDA_VAULT picks the vault.
 dev = { cmd = "uvicorn edda.api.app:create_app --factory --reload --port 8000 & npm --prefix web run dev", depends-on = [

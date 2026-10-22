@@ -36,6 +36,26 @@ pub enum Issue {
     BrokenLink(String),
 }
 
+impl std::fmt::Display for Issue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingType => f.write_str("no type"),
+            Self::UnknownType(kind) => write!(f, "type {kind:?} is not in edda.toml"),
+            Self::MissingTitle => f.write_str("no title"),
+            Self::MissingDescription => f.write_str("no description"),
+            Self::SourceWithoutId(resource) => write!(f, "source {resource} has no id"),
+            Self::DuplicateSourceId(id) => write!(f, "two sources have the id {id}"),
+            Self::UncitedSource(id) => write!(f, "source {id} is never cited"),
+            Self::UnknownCitation(label) => write!(f, "footnote [^{label}] matches no source"),
+            Self::UnresolvedSource { id, resource } => {
+                write!(f, "source {id} ({resource}) is not in raw/")
+            }
+            Self::RelativeLink(dest) => write!(f, "link {dest} is not root-relative"),
+            Self::BrokenLink(dest) => write!(f, "link {dest} points to a page that does not exist"),
+        }
+    }
+}
+
 impl Page {
     /// Parses a page file: `---`, YAML frontmatter, `---`, then the body.
     pub fn parse(id: PageId, text: &str) -> Result<Self> {
