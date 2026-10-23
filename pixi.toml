@@ -125,13 +125,15 @@ ci = { depends-on = ["pre-commit-run", "build", "check", "lint", "api-drift", "c
 # Both are arguments: `pixi run dev 8765 5199`. They serve .edda/dev-vault, a copy of examples/vault made on the first
 # run and kept between runs, so imports and accepted edits never touch the committed example. `pixi run dev-init`
 # replaces the copy with a fresh one, then starts the same way. The API reloads only for changes under python/src.
+# A reload waits at most 2 seconds for open requests: the app's event stream never ends on its own, and without the
+# limit the old worker would wait for it forever (#77). The app reconnects and refetches.
 dev-vault = { args = [
   { arg = "mode", default = "keep" },
 ], cmd = "python -m edda.devvault $PIXI_PROJECT_ROOT {{ mode }}" }
 dev = { args = [
   { arg = "api_port", default = "8000" },
   { arg = "web_port", default = "5173" },
-], cmd = "uvicorn edda.api.app:create_app --factory --reload --reload-dir python/src --port {{ api_port }} & EDDA_API=http://127.0.0.1:{{ api_port }} npm --prefix web run dev -- --port {{ web_port }} --strictPort", depends-on = [
+], cmd = "uvicorn edda.api.app:create_app --factory --reload --reload-dir python/src --timeout-graceful-shutdown 2 --port {{ api_port }} & EDDA_API=http://127.0.0.1:{{ api_port }} npm --prefix web run dev -- --port {{ web_port }} --strictPort", depends-on = [
   "native",
   "web-install",
   "dev-vault",
