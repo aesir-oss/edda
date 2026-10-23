@@ -66,14 +66,15 @@ def test_filters_the_example_vault_by_source_status_and_staleness(client: TestCl
 
 
 def test_a_job_proposes_and_the_owner_revises_and_accepts_over_http(vault_copy: Path) -> None:
+    from edda.jobs.background import Progress
     from edda.kernel import Kernel
-    from edda.models import TextEdit
+    from edda.models import JobOutcome, TextEdit
 
-    def ingest(kernel: Kernel, source: str) -> list[str]:
+    def ingest(kernel: Kernel, source: str, progress: Progress) -> JobOutcome:
         edits = [TextEdit(old="orphan.", new="orphan. Zebras graze in herds.")]
         proposal = kernel.propose_edit("ingest:test", "bm25.md", 1, edits, "adds zebras")
         kernel.cite(proposal.id, "graze in herds.", source, "Section 6")
-        return [proposal.id]
+        return JobOutcome(proposals=[proposal.id])
 
     app = create_app(vault=vault_copy, ingest=ingest)
     heard: list[tuple[str, dict[str, object]]] = []

@@ -7,6 +7,7 @@ calls, proposals) is saved in ``<vault>/jobs/<job id>.json``.
 """
 
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -35,13 +36,17 @@ to the wiki and propose those changes with the tools. You cannot write pages dir
 proposal that a person reviews.
 
 Rules the kernel enforces, so follow them or your proposal will be refused:
-- Every paragraph you add must be backed by the source: after proposing, call cite with a short exact quote of the
-  text you added (the claim) and where in the source it comes from (the locator, such as "lines 3-5" or
-  "section 2"). Uncited additions cannot be accepted.
+- Every paragraph you add must be backed by the source. Right after each propose call, before anything else, call
+  cite for each paragraph it added, with a short exact quote of the text you added (the claim) and where in the
+  source it comes from (the locator, such as "lines 3-5" or "section 2"). Uncited additions cannot be accepted.
 - Edit existing pages with propose_edit. Each edit replaces an exact piece of the page's current text (old) with new
   text (new); old must appear exactly once in the page. base_rev is the page's revision, shown in its header.
 - Create a page with propose_page only when no existing page fits. Its id is a path such as "concepts/topic.md".
-- Link to other pages with root-relative links, such as [Transformer](/transformer.md), and only to pages that exist.
+- Link to other pages with root-relative links, such as [Transformer](/transformer.md). Link only to pages that
+  already exist or that you have already proposed in this job; a link to any other page blocks the whole proposal.
+- Propose at most three new pages for one source. For other topics worth a page of their own, use flag with kind
+  "gap" on the closest existing page instead of linking to a page that does not exist.
+- Each tool returns the proposal's remaining issues. Resolve them before you start the next change.
 - Use flag for contradictions between the source and a page, or for gaps you cannot fill from the source.
 - Prefer a few precise changes over many vague ones, and do not restate what a page already says.
 
@@ -193,8 +198,18 @@ def ingest_tools(kernel: Kernel, job_id: str, source_hash: str, made: list[str])
     ]
 
 
-def ingest(kernel: Kernel, llm: LLM, config: EddaConfig, source: str, *, max_turns: int = 16) -> JobResult:
+def ingest(
+    kernel: Kernel,
+    llm: LLM,
+    config: EddaConfig,
+    source: str,
+    *,
+    max_turns: int | None = None,
+    on_turn: Callable[[int, int], None] | None = None,
+) -> JobResult:
     """Ingests one raw source (full hash or unique prefix) and saves the job record.
+
+    ``max_turns`` defaults to ``[budgets] max_turns``; ``on_turn`` hears each model call as it starts.
 
     Raises:
         LLMError: The model could not be reached or refused to work.
@@ -220,8 +235,9 @@ def ingest(kernel: Kernel, llm: LLM, config: EddaConfig, source: str, *, max_tur
         system=context.system,
         prompt=context.user_text(),
         tools=ingest_tools(kernel, job_id, text.hash, made),
-        max_turns=max_turns,
+        max_turns=max_turns or config.budgets.max_turns,
         proposals=lambda: list(made),
+        on_turn=on_turn,
     )
     record = kernel.vault / "jobs" / f"{job_id.replace(':', '_')}.json"
     record.parent.mkdir(parents=True, exist_ok=True)

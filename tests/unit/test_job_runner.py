@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from edda.config import EddaConfig
-from edda.jobs.runner import ToolFailure, ToolSpec, run_job
+from edda.jobs.runner import WRAP_UP, ToolFailure, ToolSpec, run_job
 from edda.kernel import NotFoundError
 from edda.llm import LLM, AssistantTurn, ChatResult, Tool, ToolCall, ToolTurn, Usage
 from edda.llm.types import Stop
@@ -80,11 +80,18 @@ def test_reports_why_it_stopped(stop: Stop, ending: str) -> None:
     assert run_job(llm, "ingest", "j", system="s", prompt="p", tools=[ECHO]).ending == ending
 
 
-def test_stops_at_the_turn_limit() -> None:
-    script = _Script(*[(_call("echo", str(n), text="again"), "tool_use") for n in range(3)])
+def test_stops_at_the_turn_limit_after_telling_the_model_to_wrap_up() -> None:
+    script = _Script(*[(_call("echo", str(n), text="again"), "tool_use") for n in range(4)])
     llm = LLM(EddaConfig(), providers={"local": script})
-    result = run_job(llm, "ingest", "j", system="s", prompt="p", tools=[ECHO], max_turns=3)
-    assert (result.ending, result.turns, result.tool_calls, result.proposals) == ("turn_limit", 3, 3, [])
+    heard: list[tuple[int, int]] = []
+    result = run_job(
+        llm, "ingest", "j", system="s", prompt="p", tools=[ECHO], max_turns=4, on_turn=lambda t, m: heard.append((t, m))
+    )
+    assert (result.ending, result.turns, result.tool_calls, result.proposals) == ("turn_limit", 4, 4, [])
+    assert heard == [(1, 4), (2, 4), (3, 4), (4, 4)]
+    results = [turn.results[-1].content for turn in script.sent[-1] if isinstance(turn, ToolTurn)]
+    assert [WRAP_UP in content for content in results] == [False, True, False]
+    assert results[1].startswith('{"echo": "again"}\n\nNote from the job runner')
 
 
 def test_tool_results_must_be_json() -> None:

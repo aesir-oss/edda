@@ -97,7 +97,8 @@ class Budgets(_Section):
     """Token budgets: how much context each job may pack into a prompt, and the longest reply it may ask for.
 
     The defaults fit a local model served with a 32k-token context (budget plus ``max_output_tokens`` stays under it).
-    Claude's context is far larger: raise them for jobs set to Anthropic, which bills by the token.
+    Claude's context is far larger: raise them for jobs set to Anthropic, which bills by the token. ``max_turns`` caps
+    the model calls one job may make; each resends the job's context, so it multiplies the tokens a job uses.
     """
 
     ingest: PositiveInt = 20_000
@@ -105,6 +106,7 @@ class Budgets(_Section):
     lint: PositiveInt = 24_000
     research: PositiveInt = 24_000
     max_output_tokens: PositiveInt = 8_000
+    max_turns: PositiveInt = 32
 
 
 class WebDriver(_Section):

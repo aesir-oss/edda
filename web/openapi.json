@@ -317,6 +317,28 @@
             "title": "Job",
             "type": "string"
           },
+          "max_turns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Turns"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
           "proposals": {
             "items": {
               "type": "string"
@@ -352,6 +374,17 @@
           "target": {
             "title": "Target",
             "type": "string"
+          },
+          "turn": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn"
           }
         },
         "required": [

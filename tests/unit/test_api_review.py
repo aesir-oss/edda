@@ -5,8 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from edda.api import create_app
+from edda.jobs.background import Progress
 from edda.kernel import ConflictError, Kernel
-from edda.models import EditChange, FlagChange, JournalEntry, Proposal, ProposalPreview, Source, TextEdit
+from edda.models import EditChange, FlagChange, JobOutcome, JournalEntry, Proposal, ProposalPreview, Source, TextEdit
 
 HASH = "ab12" + "0" * 60
 
@@ -81,9 +82,10 @@ def test_a_flag_cannot_be_revised(kernel: MagicMock) -> None:
 def test_starts_ingest_jobs_and_reports_them(kernel: MagicMock) -> None:
     seen: list[str] = []
 
-    def ingest(_: Kernel, source: str) -> list[str]:
+    def ingest(_: Kernel, source: str, progress: Progress) -> JobOutcome:
         seen.append(source)
-        return ["prop_000003"]
+        progress(3, 32)
+        return JobOutcome(proposals=["prop_000003"])
 
     app = create_app(kernel=kernel, ingest=ingest)
     client = TestClient(app)
@@ -93,7 +95,8 @@ def test_starts_ingest_jobs_and_reports_them(kernel: MagicMock) -> None:
     assert (run["job"], run["target"]) == ("ingest", HASH)
     app.state.jobs.wait(5)
     assert seen == [HASH]
-    assert client.get(f"/api/jobs/{run['id']}").json()["proposals"] == ["prop_000003"]
+    finished = client.get(f"/api/jobs/{run['id']}").json()
+    assert (finished["proposals"], finished["turn"], finished["max_turns"]) == (["prop_000003"], 3, 32)
     assert [r["id"] for r in client.get("/api/jobs").json()] == [run["id"]]
     assert client.get("/api/jobs/run_9999").status_code == 404
     assert client.post("/api/jobs/ingest", json={"source": ""}).status_code == 422

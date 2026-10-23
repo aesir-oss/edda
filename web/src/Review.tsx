@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { api, type AcceptRequest, type PageRevision, type Proposal, type ProposalCitation } from './api/client'
 import { ErrorNotice } from './ErrorNotice'
+import { JobStatus } from './JobStatus'
 import { lineRange } from './locator'
 
 const KINDS = { edit: 'Edit', new_page: 'New page', flag: 'Flag' } as const
@@ -12,8 +13,6 @@ export function Review() {
   const selected = useParams().id
   const proposals = useQuery({ queryKey: ['proposals', 'pending'], queryFn: () => api.proposals('pending') })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs })
-  const active = (jobs.data ?? []).filter((j) => j.state === 'queued' || j.state === 'running')
-  const failed = (jobs.data ?? []).filter((j) => j.state === 'failed')
 
   if (proposals.error) return <ErrorNotice error={proposals.error} />
   const pending = proposals.data ?? []
@@ -21,15 +20,8 @@ export function Review() {
   return (
     <div className="review-layout">
       <nav aria-label="Pending proposals">
-        <p className="muted">
-          {proposals.isPending ? 'Loading…' : `${pending.length} pending`}
-          {active.length > 0 && <> · {active.length} job running</>}
-        </p>
-        {failed.map((j) => (
-          <p key={j.id} role="alert" className="error">
-            {j.job} {j.target.slice(0, 8)} failed: {j.error}
-          </p>
-        ))}
+        <p className="muted">{proposals.isPending ? 'Loading…' : `${pending.length} pending`}</p>
+        <JobStatus jobs={jobs.data ?? []} />
         <ul className="list">
           {pending.map((p) => (
             <li key={p.id} className={p.id === current ? 'row row-selected' : 'row'}>
