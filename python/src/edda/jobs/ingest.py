@@ -17,7 +17,7 @@ import structlog
 from edda.config import EddaConfig, load_config
 from edda.context import ContextOverflow, pack
 from edda.jobs.runner import JobResult, ToolFailure, ToolSpec, run_job
-from edda.kernel import Kernel
+from edda.kernel import InvalidRequestError, Kernel
 from edda.llm import LLM, LLMError, Tool
 from edda.models import TextEdit
 
@@ -47,6 +47,8 @@ Rules the kernel enforces, so follow them or your proposal will be refused:
 - Propose at most three new pages for one source. For other topics worth a page of their own, use flag with kind
   "gap" on the closest existing page instead of linking to a page that does not exist.
 - Each tool returns the proposal's remaining issues. Resolve them before you start the next change.
+- A source converted from a document marks its pages with lines such as "<!-- page 5 -->". Cite such a source by
+  page ("page 5", "pages 5-6"); the kernel refuses a page the source does not have. read_source reads one page.
 - Use flag for contradictions between the source and a page, or for gaps you cannot fill from the source.
 - Prefer a few precise changes over many vague ones, and do not restate what a page already says.
 
@@ -105,7 +107,7 @@ def ingest_tools(kernel: Kernel, job_id: str, source_hash: str, made: list[str])
         return {"proposal": proposal.id}
 
     def read_source(args: dict[str, Any]) -> str:
-        return kernel.read_source(source_hash, args.get("start"), args.get("end")).text
+        return kernel.read_source(source_hash, args.get("start"), args.get("end"), args.get("page")).text
 
     return [
         ToolSpec(
@@ -131,8 +133,11 @@ def ingest_tools(kernel: Kernel, job_id: str, source_hash: str, made: list[str])
         ToolSpec(
             tool=Tool(
                 name="read_source",
-                description="Read the new source, or lines start to end of it (1-based, inclusive).",
-                input_schema=_schema({"start": _INT, "end": _INT}, []),
+                description=(
+                    "Read the new source, lines start to end of it (1-based, inclusive), or one page of a source "
+                    "that marks its pages."
+                ),
+                input_schema=_schema({"start": _INT, "end": _INT, "page": _INT}, []),
             ),
             run=read_source,
         ),
@@ -215,7 +220,7 @@ def ingest(
         LLMError: The model could not be reached or refused to work.
         NotFoundError: No raw source by that name.
     """
-    text = kernel.read_source(source)
+    text = kernel.read_source(_readable_source(kernel, source))
     job_id = f"ingest:{text.hash[:8]}-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
     types = ", ".join(config.vault.get("types") or ["Concept", "Paper", "Person", "Project"])
     instructions = f"{INSTRUCTIONS}\n\nPage types this wiki accepts: {types}."
@@ -225,7 +230,8 @@ def ingest(
         context = pack(kernel, instructions=instructions, source=body, budget=config.budgets.ingest)
     except ContextOverflow:
         lines = text.text.count("\n") + 1
-        stub = f"{header}\n\nThe source has {lines} lines, too many to show at once; read it in parts with read_source."
+        size = f"{lines} lines in {text.pages} pages" if text.pages else f"{lines} lines"
+        stub = f"{header}\n\nThe source has {size}, too many to show at once; read it in parts with read_source."
         context = pack(kernel, instructions=instructions, source=stub, budget=config.budgets.ingest)
     made: list[str] = []
     result = run_job(
@@ -243,6 +249,22 @@ def ingest(
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(result.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return result
+
+
+def _readable_source(kernel: Kernel, source: str) -> str:
+    """``source``, or for a document stored as its original file, the newest Markdown made from it.
+
+    Raises:
+        NotFoundError: No raw source by that name.
+        InvalidRequestError: The source is a document no Markdown was made from.
+    """
+    original = kernel.read_source(source, start=1, end=1)
+    if original.driver != "document" or original.derived_from:
+        return original.hash
+    made = [s for s in kernel.sources() if s.derived_from == original.hash]
+    if not made:
+        raise InvalidRequestError(f"source {original.hash[:12]} is a document with no Markdown made from it")
+    return max(made, key=lambda s: s.added or "").hash
 
 
 def _numbered(text: str) -> str:

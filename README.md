@@ -49,6 +49,18 @@ The web dev server proxies `/api` to whichever API port you give, and fails rath
 The search index and link graph in `<vault>/.edda/index` are rebuilt from the files whenever they change, so
 deleting them loses nothing.
 
+## Documents
+
+Office files, PDFs and scans can be added from the Library. Office files are read by MarkItDown; PDFs and images by
+Docling, which keeps reading order, tables and page numbers, with OCR only for pages that have no text. Its models
+(about 600 MB) are downloaded once:
+
+```sh
+pixi run doc-models           # Docling's layout and table models and RapidOCR's, to ~/.cache/edda/docling
+```
+
+Each document is kept unedited, next to the Markdown made from it; citations can name a page.
+
 ## Local models
 
 Jobs use a local model by default; nothing leaves the machine and nothing is billed.

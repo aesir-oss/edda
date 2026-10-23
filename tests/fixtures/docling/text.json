@@ -1,0 +1,142 @@
+{
+ "source": "text.pdf",
+ "pages_without_text": [],
+ "document": {
+  "schema_name": "DoclingDocument",
+  "version": "1.10.0",
+  "name": "text",
+  "origin": {
+   "mimetype": "application/pdf",
+   "binary_hash": 5961896576505389731,
+   "filename": "text.pdf"
+  },
+  "furniture": {
+   "self_ref": "#/furniture",
+   "children": [],
+   "content_layer": "furniture",
+   "name": "_root_",
+   "label": "unspecified"
+  },
+  "body": {
+   "self_ref": "#/body",
+   "children": [
+    {
+     "$ref": "#/texts/0"
+    },
+    {
+     "$ref": "#/texts/1"
+    },
+    {
+     "$ref": "#/texts/2"
+    }
+   ],
+   "content_layer": "body",
+   "name": "_root_",
+   "label": "unspecified"
+  },
+  "groups": [],
+  "texts": [
+   {
+    "self_ref": "#/texts/0",
+    "parent": {
+     "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "label": "text",
+    "prov": [
+     {
+      "page_no": 1,
+      "bbox": {
+       "l": 16.6,
+       "t": 772.38,
+       "r": 592.6947999999998,
+       "b": 701.01,
+       "coord_origin": "BOTTOMLEFT"
+      },
+      "charspan": [
+       0,
+       193
+      ]
+     }
+    ],
+    "orig": "Lantern protocol Lantern is a protocol for reading notes over slow links. It batches requests. Each request names a note by its content hash, so a retried request never fetche s the wrong note.",
+    "text": "Lantern protocol Lantern is a protocol for reading notes over slow links. It batches requests. Each request names a note by its content hash, so a retried request never fetche s the wrong note."
+   },
+   {
+    "self_ref": "#/texts/1",
+    "parent": {
+     "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "label": "text",
+    "prov": [
+     {
+      "page_no": 2,
+      "bbox": {
+       "l": 16.6,
+       "t": 760.38,
+       "r": 592.6947999999998,
+       "b": 749.01,
+       "coord_origin": "BOTTOMLEFT"
+      },
+      "charspan": [
+       0,
+       7
+      ]
+     }
+    ],
+    "orig": "History",
+    "text": "History"
+   },
+   {
+    "self_ref": "#/texts/2",
+    "parent": {
+     "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "label": "text",
+    "prov": [
+     {
+      "page_no": 2,
+      "bbox": {
+       "l": 16.6,
+       "t": 736.38,
+       "r": 592.6947999999998,
+       "b": 725.01,
+       "coord_origin": "BOTTOMLEFT"
+      },
+      "charspan": [
+       0,
+       75
+      ]
+     }
+    ],
+    "orig": "The first version was drafted in 2019 and revised twice after field trials.",
+    "text": "The first version was drafted in 2019 and revised twice after field trials."
+   }
+  ],
+  "pictures": [],
+  "tables": [],
+  "key_value_items": [],
+  "form_items": [],
+  "pages": {
+   "1": {
+    "size": {
+     "width": 612.0,
+     "height": 792.0
+    },
+    "page_no": 1
+   },
+   "2": {
+    "size": {
+     "width": 612.0,
+     "height": 792.0
+    },
+    "page_no": 2
+   }
+  }
+ }
+}

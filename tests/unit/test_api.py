@@ -100,7 +100,7 @@ def test_search_validates_its_parameters(client: TestClient, kernel: MagicMock) 
 def test_sources_links_history_and_graph(client: TestClient, kernel: MagicMock) -> None:
     kernel.read_source.return_value = Source(hash="ab", text="line\n")
     assert client.get("/api/sources/ab", params={"start": 2, "end": 4}).json()["text"] == "line\n"
-    kernel.read_source.assert_called_once_with("ab", 2, 4)
+    kernel.read_source.assert_called_once_with("ab", 2, 4, None)
 
     kernel.links.return_value = Links(outgoing=[OutLink(dest="https://x.y")], backlinks=["b.md"])
     assert client.get("/api/links/a.md").json() == {
@@ -134,7 +134,15 @@ def test_marks_stale_pages_and_lists_sources(client: TestClient, kernel: MagicMo
     assert [p["stale"] for p in pages] == [False, True]
     kernel.sources.return_value = [SourceSummary(hash="ab12", title="Notes", driver="markdown")]
     assert client.get("/api/sources").json() == [
-        {"hash": "ab12", "title": "Notes", "url": None, "added": None, "driver": "markdown"}
+        {
+            "hash": "ab12",
+            "title": "Notes",
+            "url": None,
+            "added": None,
+            "driver": "markdown",
+            "derived_from": None,
+            "method": None,
+        }
     ]
 
 

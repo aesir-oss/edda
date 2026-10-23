@@ -14,7 +14,7 @@ and read-only browsing, and nothing in it calls an LLM.
 | `crates/edda-index/` | tantivy BM25 search, related pages (BM25 similarity, then link neighbours) and the link graph in `.edda/index/`, rebuilt from the files whenever they change |
 | `crates/edda-kernel/` | The syscall gate: accepts or rejects proposals; the only code that writes pages, and it journals every change with the page as written |
 | `crates/edda-py/` | PyO3 bindings, built by maturin into `edda._kernel`; a thin layer, tested from Python |
-| `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `drivers` (importers: Markdown files, and web pages from hosts `policy.toml` allows), `policy` (reads `policy.toml` until edda-policy, #37, gives verdicts), `llm` (local models by default, Anthropic with the user's own key), `context` (packing ranked pages into a token budget), `jobs` (the job runner, the ingest job, and the queue that runs jobs for the API), `review` (accepting, revising and rejecting proposals), `api` (FastAPI, with server-sent events at `/api/events`), `log` (structlog) |
+| `python/src/edda/` | The Python package, installed editable by pixi: `kernel` (typed system calls), `models`, `config` (`edda.toml` outside `[vault]`), `drivers` (importers: Markdown files, documents (Office via MarkItDown, PDFs and scans via Docling), and web pages from hosts `policy.toml` allows), `policy` (reads `policy.toml` until edda-policy, #37, gives verdicts), `llm` (local models by default, Anthropic with the user's own key), `context` (packing ranked pages into a token budget), `jobs` (the job runner, the ingest job, and the queue that runs jobs for the API), `review` (accepting, revising and rejecting proposals), `api` (FastAPI, with server-sent events at `/api/events`), `log` (structlog) |
 | `web/` | Vite + React + TypeScript shell |
 | `docs/design/` | Design notes: decisions and the reference material behind them, such as `document-ingestion.md` |
 | `examples/vault/` | A small hand-written vault the tests use; `pixi run dev` serves a copy of it in `.edda/dev-vault` (kept between runs; `pixi run dev-init` starts from a fresh copy) |
@@ -63,6 +63,16 @@ only exists after it merges.
 - `wiki/index.md`, `wiki/log.md` and `journal/000001.jsonl` are generated. `EDDA_WRITE_EXAMPLES=1 pixi run cargo test
   -p edda-store --test example_vault` rewrites `index.md`; the same with `-p edda-journal` rewrites the journal from the
   history in `crates/edda-journal/tests/example_vault.rs` and `log.md` from it. Both tests fail when the files are stale.
+
+## Documents
+
+- `edda.drivers.document` keeps the original file in `raw/` unedited and the Markdown made from it as a second source
+  whose metadata names it (`derived_from`, `converter`, `method`). Paged Markdown marks pages with `<!-- page N -->`
+  lines (`edda_store::pages`); `cite` refuses a page the source does not have, and `read_source(page=N)` reads one.
+- Docling's and RapidOCR's models are downloaded once by `pixi run doc-models` to `~/.cache/edda/docling` (approved by
+  the owner: Docling's layout and table models from the docling-project repositories, RapidOCR's models). The
+  importer never downloads at run time, and CI never runs them: tests replay Docling output recorded in
+  `tests/fixtures/docling/`. Re-record those when Docling's version changes.
 
 ## Models
 

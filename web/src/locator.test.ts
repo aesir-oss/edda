@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { lineRange } from './locator'
+import { lineRange, pageOf } from './locator'
 
 test.each([
   ['lines 3-5', { start: 3, end: 5 }],
@@ -9,4 +9,15 @@ test.each([
   ['Section 3.2', undefined],
 ])('%s', (locator, expected) => {
   expect(lineRange(locator)).toEqual(expected)
+})
+
+test.each([
+  ['page 5', 5],
+  ['Pages 3-4, table 2', 3],
+  ['p. 7', 7],
+  ['pp.12', 12],
+  ['lines 3-5', undefined],
+  ['section 2', undefined],
+])('%s names page %s', (locator, page) => {
+  expect(pageOf(locator)).toBe(page)
 })

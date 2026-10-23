@@ -47,6 +47,12 @@ pub enum StoreError {
     PageExists(String),
     #[error("the claim is not in the text this proposal adds: {0:?}")]
     ClaimNotFound(String),
+    #[error("source {source_hash} has no page {page}; its pages are 1 to {last}")]
+    NoSuchPage {
+        source_hash: String,
+        page: u64,
+        last: u64,
+    },
 }
 
 impl StoreError {

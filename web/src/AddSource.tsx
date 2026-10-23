@@ -1,11 +1,21 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { api } from './api/client'
+import { api, type AddedSource } from './api/client'
 
 type Input = { file: File } | { url: string }
 
-/** Adds a Markdown file or a web page to raw/, then offers to ingest it: the model's changes arrive for review. */
+const DOCUMENTS = ['.docx', '.pptx', '.xlsx', '.pdf', '.png', '.jpg', '.jpeg', '.tif', '.tiff']
+const isDocument = (file: File) => DOCUMENTS.some((ext) => file.name.toLowerCase().endsWith(ext))
+
+/** What an import added, as the source to ingest: for a document, the Markdown made from it. */
+async function addSource(input: Input): Promise<AddedSource> {
+  if ('url' in input) return api.importWeb(input.url)
+  if (!isDocument(input.file)) return api.importMarkdown(input.file)
+  return (await api.importDocument(input.file)).derived
+}
+
+/** Adds a Markdown file, a document (Office, PDF or scan) or a web page to raw/, then offers to ingest it. */
 export function AddSource() {
   const queryClient = useQueryClient()
   const [url, setUrl] = useState('')
@@ -14,7 +24,7 @@ export function AddSource() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['jobs'] }),
   })
   const add = useMutation({
-    mutationFn: (input: Input) => ('file' in input ? api.importMarkdown(input.file) : api.importWeb(input.url)),
+    mutationFn: addSource,
     onMutate: () => ingest.reset(),
     onSuccess: (_, input) => {
       if ('url' in input) setUrl('')
@@ -25,10 +35,10 @@ export function AddSource() {
   return (
     <div className="add-source">
       <label className="button">
-        Add Markdown source
+        Add a file
         <input
           type="file"
-          accept=".md,.markdown,text/markdown"
+          accept={['.md', '.markdown', ...DOCUMENTS].join(',')}
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0]
@@ -56,7 +66,7 @@ export function AddSource() {
         </button>
       </form>
       <span role="status" className="muted">
-        {add.isPending && 'Adding…'}
+        {add.isPending && 'Adding… (documents take a while to convert)'}
         {add.data &&
           (add.data.added ? `Added ${add.data.source.title ?? add.data.source.hash.slice(0, 12)}` : 'Already stored')}
       </span>

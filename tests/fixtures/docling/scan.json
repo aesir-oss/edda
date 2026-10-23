@@ -1,0 +1,107 @@
+{
+ "source": "scan.pdf",
+ "pages_without_text": [
+  1
+ ],
+ "document": {
+  "schema_name": "DoclingDocument",
+  "version": "1.10.0",
+  "name": "scan",
+  "origin": {
+   "mimetype": "application/pdf",
+   "binary_hash": 9345198751353555822,
+   "filename": "scan.pdf"
+  },
+  "furniture": {
+   "self_ref": "#/furniture",
+   "children": [],
+   "content_layer": "furniture",
+   "name": "_root_",
+   "label": "unspecified"
+  },
+  "body": {
+   "self_ref": "#/body",
+   "children": [
+    {
+     "$ref": "#/texts/0"
+    },
+    {
+     "$ref": "#/texts/1"
+    }
+   ],
+   "content_layer": "body",
+   "name": "_root_",
+   "label": "unspecified"
+  },
+  "groups": [],
+  "texts": [
+   {
+    "self_ref": "#/texts/0",
+    "parent": {
+     "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "label": "text",
+    "prov": [
+     {
+      "page_no": 1,
+      "bbox": {
+       "l": 100.39772542317708,
+       "t": 1600.1713765462239,
+       "r": 379.5738525390625,
+       "b": 1558.6199747721355,
+       "coord_origin": "BOTTOMLEFT"
+      },
+      "charspan": [
+       0,
+       11
+      ]
+     }
+    ],
+    "orig": "Scannedmemo",
+    "text": "Scannedmemo"
+   },
+   {
+    "self_ref": "#/texts/1",
+    "parent": {
+     "$ref": "#/body"
+    },
+    "children": [],
+    "content_layer": "body",
+    "label": "text",
+    "prov": [
+     {
+      "page_no": 1,
+      "bbox": {
+       "l": 97.7556864420573,
+       "t": 1490.54638671875,
+       "r": 849.8579915364584,
+       "b": 1446.342753092448,
+       "coord_origin": "BOTTOMLEFT"
+      },
+      "charspan": [
+       0,
+       43
+      ]
+     }
+    ],
+    "orig": "The field station syncs once a day at noon.",
+    "text": "The field station syncs once a day at noon."
+   }
+  ],
+  "pictures": [],
+  "tables": [],
+  "key_value_items": [],
+  "form_items": [],
+  "pages": {
+   "1": {
+    "size": {
+     "width": 1240.0,
+     "height": 1754.0
+    },
+    "page_no": 1
+   }
+  }
+ }
+}
