@@ -59,8 +59,10 @@ pixi run -e llm llm-serve     # llama.cpp's llama-server on http://127.0.0.1:808
 pixi run llm-smoke            # one tool-calling round trip against the configured model
 ```
 
-`pixi run -e llm llm-serve <model file> <port> <context>` changes the defaults. Ollama, mlx-lm or LM Studio work too:
-add them under `[llm.endpoints]` in `edda.toml` with their OpenAI-compatible `base_url`.
+`pixi run -e llm llm-serve <model file> <port> <context>` changes the defaults. The server requires the key in
+`~/.cache/edda/llm-key`, which `llm-serve` creates on first use and Edda's `local` endpoint sends, so a web page open in
+your browser cannot use your model; give the same key to any other tool you point at it. Ollama, mlx-lm or LM Studio
+work too: add them under `[llm.endpoints]` in `edda.toml` with their OpenAI-compatible `base_url`.
 
 ### Hosted models, with your own key
 

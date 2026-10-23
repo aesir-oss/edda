@@ -114,6 +114,8 @@ llm-smoke = { args = [
 ], cmd = "python -m edda.llm.smoke {{ vault }} {{ provider }}" }
 ingest = { args = ["vault", "source"], cmd = "python -m edda.jobs.ingest {{ vault }} {{ source }}", description = "run the ingest job on one raw source: ingest <vault> <source hash or prefix>" }
 llm-fetch = { args = [{ arg = "name", default = "qwen3-14b" }], cmd = "python -m edda.llm.models {{ name }}" }
+# Makes sure ~/.cache/edda/llm-key exists: the key llm-serve requires and the local endpoint sends.
+llm-key = "python -m edda.llm.localkey"
 
 changelog = "git cliff -o CHANGELOG.md"
 pre-commit-run = "pre-commit run --all-files"
@@ -181,12 +183,16 @@ bmad-method install -y \
 # The local model server: llama.cpp's llama-server with its OpenAI-compatible API on 127.0.0.1, every layer on the
 # GPU, and tool calling through the model's chat template. Weights come from `pixi run llm-fetch`. Arguments, in
 # order: model file, port, context size, e.g. `pixi run -e llm llm-serve Qwen3-14B-Q4_K_M.gguf 8081 16384`.
+# It requires the key in ~/.cache/edda/llm-key (created on first use), so a web page in your browser cannot use the
+# model, and it turns off /slots, which reports what the server is working on.
 [feature.llm.tasks]
 llm-serve = { args = [
   { arg = "model", default = "Qwen3-14B-Q4_K_M.gguf" },
   { arg = "port", default = "8080" },
   { arg = "ctx", default = "32768" },
-], cmd = "llama-server -m $HOME/.cache/edda/models/{{ model }} --host 127.0.0.1 --port {{ port }} -c {{ ctx }} -ngl 99 -fa on --jinja --alias {{ model }}" }
+], cmd = "llama-server -m $HOME/.cache/edda/models/{{ model }} --host 127.0.0.1 --port {{ port }} -c {{ ctx }} -ngl 99 -fa on --jinja --alias {{ model }} --api-key-file $HOME/.cache/edda/llm-key --no-slots", depends-on = [
+  { task = "llm-key", environment = "default" },
+] }
 
 [environments]
 default = ["py314", "dev"]

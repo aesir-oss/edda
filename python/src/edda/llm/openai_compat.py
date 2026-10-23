@@ -16,6 +16,7 @@ import structlog
 
 from edda.config import Endpoint
 from edda.llm.errors import LLMError, ProviderNotConfigured
+from edda.llm.localkey import read_key, resolve
 from edda.llm.types import AssistantTurn, ChatResult, Stop, Tool, ToolCall, ToolTurn, Turn, Usage, UserTurn
 
 log = structlog.get_logger("edda.llm.openai_compat")
@@ -46,6 +47,7 @@ class OpenAICompatibleProvider:
         self.config = config
         self.retries = retries
         headers: dict[str, str] = {}
+        key: str | None = None
         if config.api_key_env:
             key = (os.environ if env is None else env).get(config.api_key_env)
             if not key:
@@ -53,6 +55,10 @@ class OpenAICompatibleProvider:
                     f"the {name} endpoint needs your own API key in {config.api_key_env}: export it in your shell, or "
                     'set the job back to "local" in edda.toml'
                 )
+        elif config.api_key_file:
+            key = read_key(resolve(config.api_key_file, env))
+        self.sent_key = key is not None
+        if key:
             parts = urlsplit(config.base_url)
             if parts.scheme != "https" and parts.hostname not in _LOOPBACK:
                 raise ProviderNotConfigured(f"refusing to send the {name} key over plain HTTP to {parts.hostname}")
@@ -112,6 +118,11 @@ class OpenAICompatibleProvider:
                 reason = f"HTTP {response.status_code}"
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
+                if status in (401, 403) and not self.sent_key:
+                    raise ProviderNotConfigured(
+                        f"the {self.name} endpoint wants an API key (HTTP {status}); `pixi run -e llm llm-serve` "
+                        f"writes one to {self.config.api_key_file or '~/.cache/edda/llm-key'}"
+                    ) from exc
                 if status in (401, 403):
                     raise ProviderNotConfigured(
                         f"the {self.name} endpoint rejected the API key (HTTP {status})"

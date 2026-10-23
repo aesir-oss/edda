@@ -18,19 +18,21 @@ class _Section(BaseModel):
 class Endpoint(_Section):
     """An OpenAI-compatible chat-completions endpoint: a local model server, or a hosted one such as NVIDIA's.
 
-    ``api_key_env`` names the environment variable that holds the endpoint's key; the key itself never goes in
-    ``edda.toml``. An endpoint without one is called without authentication, as local servers expect.
+    ``api_key_env`` names the environment variable that holds the endpoint's key; ``api_key_file`` names a file that
+    holds it, as the local server's does. The key itself never goes in ``edda.toml``. A missing key file means no key,
+    for local servers that need none.
     """
 
     base_url: str
     model: str
     api_key_env: str | None = None
+    api_key_file: str | None = None
     timeout_seconds: PositiveInt = 600
 
 
 def _default_endpoints() -> dict[str, dict[str, Any]]:
     return {
-        "local": {"base_url": "http://127.0.0.1:8080/v1", "model": "local"},
+        "local": {"base_url": "http://127.0.0.1:8080/v1", "model": "local", "api_key_file": "~/.cache/edda/llm-key"},
         "nvidia": {
             "base_url": "https://integrate.api.nvidia.com/v1",
             "model": "nvidia/nemotron-3-ultra-550b-a55b",

@@ -13,10 +13,12 @@ lint = "local"
 research = "local"
 summary = "local"
 
-# OpenAI-compatible endpoints. api_key_env names the environment variable that holds the endpoint's key.
+# OpenAI-compatible endpoints. api_key_env names the environment variable that holds the endpoint's key, and
+# api_key_file a file holding it (llm-serve creates this one; a missing file means no key).
 [llm.endpoints.local]
 base_url = "http://127.0.0.1:8080/v1"
 model = "local"
+api_key_file = "~/.cache/edda/llm-key"
 timeout_seconds = 600
 
 [llm.endpoints.nvidia]
