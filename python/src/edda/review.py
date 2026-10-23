@@ -47,6 +47,13 @@ def accept(
         return Decision(proposal=kernel.proposal(revision.id), entry=entry, revised_from=proposal_id)
 
 
+def accept_together(kernel: Kernel, proposal_ids: list[str], by: str = OWNER) -> list[Decision]:
+    """Accepts several proposals as one change, so pages that link to each other can land together."""
+    entries = kernel.accept_together(proposal_ids, by)
+    decided = [entry.data["proposal"] for entry in entries if isinstance(entry.data, dict)]
+    return [Decision(proposal=kernel.proposal(id), entry=entry) for id, entry in zip(decided, entries, strict=True)]
+
+
 def reject(kernel: Kernel, proposal_id: str, reason: str, by: str = OWNER) -> Decision:
     """Rejects a pending proposal; the page is untouched."""
     entry = kernel.reject(proposal_id, reason, by)

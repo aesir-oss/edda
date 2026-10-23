@@ -214,6 +214,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/proposals/accept-together": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Proposals Together
+         * @description Applies several proposals as one change: all of them, checked as a set, or none.
+         */
+        post: operations["accept_proposals_together_api_proposals_accept_together_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/proposals/{proposal_id}": {
         parameters: {
             query?: never;
@@ -388,6 +408,14 @@ export interface components {
             /** Edits */
             edits?: components["schemas"]["TextEdit"][] | null;
             page?: components["schemas"]["PageRevision"] | null;
+        };
+        /**
+         * AcceptTogetherRequest
+         * @description Proposals to accept as one change: pages that link to each other can only land together.
+         */
+        AcceptTogetherRequest: {
+            /** Ids */
+            ids: string[];
         };
         /**
          * AddedSource
@@ -1147,6 +1175,46 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Proposal"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_proposals_together_api_proposals_accept_together_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptTogetherRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Decision"][];
+                };
+            };
+            /** @description A page changed since its proposal was made */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

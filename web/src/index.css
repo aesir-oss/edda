@@ -333,3 +333,9 @@ textarea {
   color: var(--bad);
   font-size: 0.92rem;
 }
+
+.together {
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+}

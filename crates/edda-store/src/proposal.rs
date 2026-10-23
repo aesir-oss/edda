@@ -258,6 +258,12 @@ impl Vault {
 
     /// The page a proposal would produce, as a diff, with the kernel rules it breaks.
     pub fn preview(&self, proposal: &Proposal) -> Result<Preview> {
+        self.preview_with(proposal, &[])
+    }
+
+    /// [`Vault::preview`], with links to the pages in `also` counted as resolving: the new pages of proposals
+    /// accepted together with this one.
+    pub fn preview_with(&self, proposal: &Proposal, also: &[PageId]) -> Result<Preview> {
         let added = with_footnote_refs(&proposal.change, &proposal.citations);
         let (before, page) = match &proposal.change {
             Change::Flag { page, .. } => {
@@ -319,11 +325,14 @@ impl Vault {
 
         let mut snapshot = self.snapshot()?;
         snapshot.add_page(page.id.clone());
-        let mut issues: Vec<String> = page
-            .check(&snapshot)
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        for id in also {
+            snapshot.add_page(id.clone());
+        }
+        let mut issues: Vec<String> = Vec::new();
+        if matches!(proposal.change, Change::NewPage { .. }) && self.page_exists(&page.id) {
+            issues.push(format!("{} already exists", page.id));
+        }
+        issues.extend(page.check(&snapshot).iter().map(ToString::to_string));
         if proposal.job != OWNER {
             let replaced: Vec<&str> = match &proposal.change {
                 Change::Edit { edits, .. } => edits.iter().map(|e| e.old.as_str()).collect(),

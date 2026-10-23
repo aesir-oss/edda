@@ -8,23 +8,58 @@ import { lineRange } from './locator'
 
 const KINDS = { edit: 'Edit', new_page: 'New page', flag: 'Flag' } as const
 
-/** Pending proposals, oldest first, beside the one being reviewed. */
+/** Pending proposals, oldest first, beside the one being reviewed; several can be selected and accepted together. */
 export function Review() {
   const selected = useParams().id
+  const queryClient = useQueryClient()
   const proposals = useQuery({ queryKey: ['proposals', 'pending'], queryFn: () => api.proposals('pending') })
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: api.jobs })
+  const [chosen, setChosen] = useState<string[]>([])
+  const together = useMutation({
+    mutationFn: api.acceptTogether,
+    onSuccess: () => {
+      setChosen([])
+      void queryClient.invalidateQueries({ queryKey: ['proposals'] })
+      void queryClient.invalidateQueries({ queryKey: ['pages'] })
+      void queryClient.invalidateQueries({ queryKey: ['page'] })
+    },
+  })
+  const choose = (ids: string[], on: boolean) =>
+    setChosen((now) => (on ? [...new Set([...now, ...ids])] : now.filter((id) => !ids.includes(id))))
 
   if (proposals.error) return <ErrorNotice error={proposals.error} />
   const pending = proposals.data ?? []
   const current = selected ?? pending[0]?.id
+  const live = chosen.filter((id) => pending.some((p) => p.id === id))
   return (
     <div className="review-layout">
       <nav aria-label="Pending proposals">
         <p className="muted">{proposals.isPending ? 'Loading…' : `${pending.length} pending`}</p>
         <JobStatus jobs={jobs.data ?? []} />
+        {live.length >= 2 && (
+          <button
+            type="button"
+            className="button button-primary"
+            disabled={together.isPending}
+            onClick={() => together.mutate(live)}
+          >
+            Accept {live.length} together
+          </button>
+        )}
+        {together.error && (
+          <p role="alert" className="error">
+            {together.error.message}
+          </p>
+        )}
         <ul className="list">
           {pending.map((p) => (
             <li key={p.id} className={p.id === current ? 'row row-selected' : 'row'}>
+              <input
+                type="checkbox"
+                aria-label={`Select ${p.change.page}`}
+                checked={chosen.includes(p.id)}
+                onChange={(e) => choose([p.id], e.target.checked)}
+              />{' '}
               <Link to={`/review/${p.id}`} className="row-title">
                 {p.change.page}
               </Link>
@@ -36,19 +71,25 @@ export function Review() {
         </ul>
         {pending.length === 0 && !proposals.isPending && <p className="muted">Nothing to review.</p>}
       </nav>
-      {current ? <ProposalReview key={current} id={current} /> : <div />}
+      {current ? (
+        <ProposalReview key={current} id={current} pending={pending} onSelect={(ids) => choose(ids, true)} />
+      ) : (
+        <div />
+      )}
     </div>
   )
 }
 
-function ProposalReview({ id }: { id: string }) {
+type Related = { pending: Proposal[]; onSelect: (ids: string[]) => void }
+
+function ProposalReview({ id, pending, onSelect }: { id: string } & Related) {
   const proposal = useQuery({ queryKey: ['proposal', id], queryFn: () => api.proposal(id) })
   if (proposal.error) return <ErrorNotice error={proposal.error} />
   if (!proposal.data) return <p className="muted">Loading proposal…</p>
-  return <ProposalDetail proposal={proposal.data} />
+  return <ProposalDetail proposal={proposal.data} pending={pending} onSelect={onSelect} />
 }
 
-function ProposalDetail({ proposal }: { proposal: Proposal }) {
+function ProposalDetail({ proposal, pending, onSelect }: { proposal: Proposal } & Related) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
@@ -66,6 +107,7 @@ function ProposalDetail({ proposal }: { proposal: Proposal }) {
   const reject = useMutation({ mutationFn: () => api.reject(proposal.id, reason), onSuccess: decided })
   const busy = accept.isPending || reject.isPending
   const error = accept.error ?? reject.error
+  const partners = needs(proposal, pending)
 
   return (
     <article aria-label={`Proposal ${proposal.id}`}>
@@ -87,6 +129,19 @@ function ProposalDetail({ proposal }: { proposal: Proposal }) {
             <li key={issue}>{issue}</li>
           ))}
         </ul>
+      )}
+      {partners.length > 0 && (
+        <p className="together">
+          It links to {partners.map((p) => p.change.page).join(', ')}, which{' '}
+          {partners.length === 1 ? 'another proposal creates' : 'other proposals create'}: accept them together.{' '}
+          <button
+            type="button"
+            className="button"
+            onClick={() => onSelect([proposal.id, ...partners.map((p) => p.id)])}
+          >
+            Select {partners.length === 1 ? 'both' : `all ${partners.length + 1}`}
+          </button>
+        </p>
       )}
       {editing ? <Editor proposal={proposal} onChange={setRevision} /> : <Diff text={proposal.preview.diff} />}
       {citations.length > 0 && (
@@ -125,6 +180,16 @@ function ProposalDetail({ proposal }: { proposal: Proposal }) {
         </p>
       )}
     </article>
+  )
+}
+
+const BROKEN = /^link \/(.+) points to a page that does not exist$/
+
+/** The pending new-page proposals that would create pages this proposal's broken links point to. */
+function needs(proposal: Proposal, pending: Proposal[]): Proposal[] {
+  const missing = proposal.preview.issues.map((issue) => BROKEN.exec(issue)?.[1]).filter(Boolean)
+  return pending.filter(
+    (p) => p.id !== proposal.id && p.change.kind === 'new_page' && missing.includes(p.change.page),
   )
 }
 
