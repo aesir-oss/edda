@@ -31,6 +31,8 @@ class SourceSummary(_Model):
     url: str | None = None
     added: str | None = None
     driver: str | None = None
+    derived_from: str | None = None
+    method: str | None = None
 
 
 class SearchHit(_Model):
@@ -75,6 +77,10 @@ class Source(_Model):
     url: str | None = None
     added: str | None = None
     driver: str | None = None
+    derived_from: str | None = None
+    converter: str | None = None
+    method: str | None = None
+    pages: int = 0
     text: str
 
 
@@ -194,6 +200,13 @@ class AddedSource(_Model):
 
     source: SourceSummary
     added: bool
+
+
+class DocumentImport(_Model):
+    """A document as stored, unedited, and the Markdown source made from it."""
+
+    original: AddedSource
+    derived: AddedSource
 
 
 class Related(_Model):

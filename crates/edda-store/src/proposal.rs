@@ -177,6 +177,19 @@ impl Vault {
             return Err(StoreError::ClaimNotFound(claim.to_owned()));
         }
         let entry = self.raw().resolve(source)?;
+        let cited = crate::pages::cited_pages(locator);
+        if !cited.is_empty() {
+            let marked = crate::pages::pages(&self.raw().read_text(&entry, None)?);
+            if let (Some(&last), Some(&page)) =
+                (marked.last(), cited.iter().find(|p| !marked.contains(p)))
+            {
+                return Err(StoreError::NoSuchPage {
+                    source_hash: entry.hash.clone(),
+                    page,
+                    last,
+                });
+            }
+        }
         let resource = entry
             .meta
             .url
@@ -576,6 +589,47 @@ mod tests {
                 new: new.into(),
             }],
         }
+    }
+
+    #[test]
+    fn a_cited_page_must_be_one_the_source_has() {
+        let (_dir, vault, notes) = vault();
+        let paged = b"<!-- page 1 -->\nIntro.\n\n<!-- page 2 -->\nHeads run in parallel.\n";
+        let pdf = vault
+            .raw()
+            .add(paged, Some("md"), &RawMeta::default())
+            .unwrap()
+            .hash;
+        let p = vault
+            .propose(
+                "ingest:1",
+                edit("values.", "values. Heads run in parallel."),
+                "r",
+            )
+            .unwrap();
+        let err = vault
+            .cite(&p.id, "Heads run", &pdf, "page 3", None)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!("source {pdf} has no page 3; its pages are 1 to 2")
+        );
+        assert!(
+            vault
+                .cite(&p.id, "Heads run", &pdf, "pages 1-2", None)
+                .is_ok()
+        );
+        assert!(
+            vault
+                .cite(&p.id, "Heads run", &pdf, "lines 4-5", None)
+                .is_ok()
+        );
+        assert!(
+            vault
+                .cite(&p.id, "Heads run", &notes, "page 9", None)
+                .is_ok(),
+            "unpaged sources are not checked"
+        );
     }
 
     #[test]

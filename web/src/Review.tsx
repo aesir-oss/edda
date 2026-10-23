@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router'
 import { api, type AcceptRequest, type PageRevision, type Proposal, type ProposalCitation } from './api/client'
 import { ErrorNotice } from './ErrorNotice'
 import { JobStatus } from './JobStatus'
-import { lineRange } from './locator'
+import { lineRange, pageOf } from './locator'
 
 const KINDS = { edit: 'Edit', new_page: 'New page', flag: 'Flag' } as const
 
@@ -273,9 +273,10 @@ function Editor({ proposal, onChange }: { proposal: Proposal; onChange: (revisio
 /** A claim beside the source text it cites, so the owner can check one against the other. */
 function CitationCheck({ citation }: { citation: ProposalCitation }) {
   const range = lineRange(citation.locator)
+  const page = range ? undefined : pageOf(citation.locator)
   const source = useQuery({
-    queryKey: ['source', citation.raw, range?.start, range?.end],
-    queryFn: () => api.source(citation.raw, range ?? {}),
+    queryKey: ['source', citation.raw, range?.start, range?.end, page],
+    queryFn: () => api.source(citation.raw, range ?? (page ? { page } : {})),
   })
   return (
     <div className="citation">
@@ -286,7 +287,7 @@ function CitationCheck({ citation }: { citation: ProposalCitation }) {
         </p>
         {source.error ? (
           <p className="error">{source.error.message}</p>
-        ) : range ? (
+        ) : range || page ? (
           <pre className="source-text" aria-label="Cited source text">
             {source.data?.text ?? 'Loading…'}
           </pre>

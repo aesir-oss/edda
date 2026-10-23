@@ -95,9 +95,15 @@ class Kernel:
         """A page with its HTML; links to other pages are rewritten to start with ``link_prefix``."""
         return Page.model_validate_json(self._kernel.read_page(page_id, link_prefix))
 
-    def read_source(self, hash: str, start: int | None = None, end: int | None = None) -> Source:
-        """A raw source by full hash or unique prefix, or lines ``start`` to ``end`` of it (1-based, inclusive)."""
-        return Source.model_validate_json(self._kernel.read_source(hash, start, end))
+    def read_source(
+        self, hash: str, start: int | None = None, end: int | None = None, page: int | None = None
+    ) -> Source:
+        """A raw source by hash or unique prefix: all of it, lines ``start`` to ``end`` (1-based), or one ``page``.
+
+        Raises:
+            InvalidRequestError: The source has no such page.
+        """
+        return Source.model_validate_json(self._kernel.read_source(hash, start, end, page))
 
     def sources(self) -> list[SourceSummary]:
         """Every raw source, by hash."""
@@ -166,13 +172,17 @@ class Kernel:
         url: str | None = None,
         driver: str | None = None,
         by: str = "owner",
+        derived_from: str | None = None,
+        converter: str | None = None,
+        method: str | None = None,
     ) -> AddedSource:
         """Stores ``data`` in ``raw/`` under its SHA-256, journals it and refreshes the index.
 
         Adding bytes that are already stored changes nothing and returns the stored source with ``added`` false.
+        A source converted from another names it in ``derived_from``, with the ``converter`` and the ``method``.
         """
         with self.writes:
-            raw = self._kernel.add_source(data, extension, title, url, driver, by)
+            raw = self._kernel.add_source(data, extension, title, url, driver, by, derived_from, converter, method)
         added = AddedSource.model_validate_json(raw)
         self._emit("source", {"hash": added.source.hash, "added": added.added})
         return added

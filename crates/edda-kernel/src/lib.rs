@@ -57,7 +57,12 @@ pub fn add_source(
         page: None,
         rev: None,
         summary: format!("added source {name}"),
-        data: json!({ "hash": source.hash, "url": source.meta.url, "driver": source.meta.driver }),
+        data: json!({
+            "hash": source.hash,
+            "url": source.meta.url,
+            "driver": source.meta.driver,
+            "derived_from": source.meta.derived_from,
+        }),
     })?;
     write_log(vault)?;
     Ok(AddedSource {

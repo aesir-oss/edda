@@ -24,6 +24,15 @@ pub struct RawMeta {
     /// The importer that produced the file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver: Option<String>,
+    /// For text converted from another source, such as Markdown from a PDF: that source's hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub derived_from: Option<String>,
+    /// The converter and its version, such as `docling 2.96.1`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub converter: Option<String>,
+    /// How the text was got: `native` (the file's own structure), `layout` (a layout engine) or `ocr`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
     #[serde(flatten)]
     pub extra: toml::Table,
 }

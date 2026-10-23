@@ -322,6 +322,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sources/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Document Source
+         * @description Stores an Office file, PDF or image unedited, with the Markdown made from it as a second source.
+         */
+        post: operations["import_document_source_api_sources_document_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources/markdown": {
         parameters: {
             query?: never;
@@ -463,6 +483,14 @@ export interface components {
             proposal: components["schemas"]["Proposal"];
             /** Revised From */
             revised_from?: string | null;
+        };
+        /**
+         * DocumentImport
+         * @description A document as stored, unedited, and the Markdown source made from it.
+         */
+        DocumentImport: {
+            derived: components["schemas"]["AddedSource"];
+            original: components["schemas"]["AddedSource"];
         };
         /**
          * EditChange
@@ -779,10 +807,21 @@ export interface components {
         Source: {
             /** Added */
             added?: string | null;
+            /** Converter */
+            converter?: string | null;
+            /** Derived From */
+            derived_from?: string | null;
             /** Driver */
             driver?: string | null;
             /** Hash */
             hash: string;
+            /** Method */
+            method?: string | null;
+            /**
+             * Pages
+             * @default 0
+             */
+            pages: number;
             /** Text */
             text: string;
             /** Title */
@@ -797,10 +836,14 @@ export interface components {
         SourceSummary: {
             /** Added */
             added?: string | null;
+            /** Derived From */
+            derived_from?: string | null;
             /** Driver */
             driver?: string | null;
             /** Hash */
             hash: string;
+            /** Method */
+            method?: string | null;
             /** Title */
             title?: string | null;
             /** Url */
@@ -1389,6 +1432,53 @@ export interface operations {
             };
         };
     };
+    import_document_source_api_sources_document_post: {
+        parameters: {
+            query: {
+                /** @description The file's name; its extension picks the lane */
+                filename: string;
+                /** @description Overrides the title read from the document */
+                title?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The same document was already converted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentImport"];
+                };
+            };
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentImport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     import_markdown_source_api_sources_markdown_post: {
         parameters: {
             query?: {
@@ -1501,6 +1591,8 @@ export interface operations {
                 start?: number | null;
                 /** @description Last line, inclusive */
                 end?: number | null;
+                /** @description One page of a source that marks its pages */
+                page?: number | null;
             };
             header?: never;
             path: {

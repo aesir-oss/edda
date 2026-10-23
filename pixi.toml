@@ -19,6 +19,8 @@ pip = ">=26.2.2,<27"
 anthropic = ">=2.1.0,<3"
 httpx = ">=0.28.1,<0.29"
 trafilatura = ">=2.0.0,<3"
+docling = ">=2.96,<3"
+markitdown = ">=0.1.8,<0.2"
 
 # The Python package and its native module (crates/edda-py) are built from this repository by maturin, never
 # resolved from PyPI: an unrelated `edda` exists there.
@@ -114,6 +116,9 @@ llm-smoke = { args = [
 ], cmd = "python -m edda.llm.smoke {{ vault }} {{ provider }}" }
 ingest = { args = ["vault", "source"], cmd = "python -m edda.jobs.ingest {{ vault }} {{ source }}", description = "run the ingest job on one raw source: ingest <vault> <source hash or prefix>" }
 llm-fetch = { args = [{ arg = "name", default = "qwen3-14b" }], cmd = "python -m edda.llm.models {{ name }}" }
+# Downloads the models the document importer needs (Docling's layout and table models, RapidOCR's) to
+# ~/.cache/edda/docling, at the revisions this Docling version pins. The importer never downloads at run time.
+doc-models = "docling-tools models download layout tableformer rapidocr -o $HOME/.cache/edda/docling"
 # Makes sure ~/.cache/edda/llm-key exists: the key llm-serve requires and the local endpoint sends.
 llm-key = "python -m edda.llm.localkey"
 

@@ -203,3 +203,17 @@ test('selection by hand, and refusals of the whole set', async () => {
     ids: ['prop_000002', 'prop_000001'],
   })
 })
+
+test('a citation by page shows that page of the source', async () => {
+  const paged = {
+    ...editProposal,
+    citations: [{ id: 'lantern-p2', claim: 'Zebras graze.', raw: 'ab12', resource: 'raw:ab12', title: 'Lantern', locator: 'page 2' }],
+  }
+  const fetchMock = routes({
+    '/api/proposals/prop_000001': paged,
+    '/api/sources/ab12': (url: URL) => ({ hash: 'ab12', text: url.searchParams.get('page') === '2' ? '<!-- page 2 -->\nHistory' : 'all' }),
+  })
+  renderReview('/review/prop_000001')
+  expect(await screen.findByLabelText('Cited source text')).toHaveTextContent('<!-- page 2 --> History')
+  expect(call(fetchMock, '/api/sources/ab12?page=2')).toBeDefined()
+})

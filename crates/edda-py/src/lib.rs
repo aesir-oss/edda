@@ -53,6 +53,7 @@ fn store_err(e: StoreError) -> PyErr {
         | StoreError::EditDoesNotApply { .. }
         | StoreError::PageExists(_)
         | StoreError::ClaimNotFound(_)
+        | StoreError::NoSuchPage { .. }
         | StoreError::NotPending(_) => InvalidRequestError::new_err(e.to_string()),
         other => KernelError::new_err(other.to_string()),
     }
@@ -258,21 +259,34 @@ impl Kernel {
         })
     }
 
-    /// `read_source(hash, span)`: a raw source's text, or lines `start` to `end` of it (1-based, inclusive).
-    #[pyo3(signature = (hash, start = None, end = None))]
+    /// `read_source(hash, span)`: a raw source's text, lines `start` to `end` of it (1-based, inclusive), or one
+    /// `page` of a source converted from a paged document.
+    #[pyo3(signature = (hash, start = None, end = None, page = None))]
     fn read_source(
         &self,
         py: Python<'_>,
         hash: &str,
         start: Option<usize>,
         end: Option<usize>,
+        page: Option<u64>,
     ) -> PyResult<String> {
         py.detach(|| {
             let raw = self.vault.raw();
             let entry = raw.resolve(hash).map_err(store_err)?;
-            let lines = match (start, end) {
-                (None, None) => None,
-                (s, e) => Some(s.unwrap_or(1)..=e.unwrap_or(usize::MAX)),
+            let full = raw.read_text(&entry, None).map_err(store_err)?;
+            let marked = edda_store::pages::pages(&full);
+            let lines = match (page, start, end) {
+                (Some(p), _, _) => {
+                    Some(edda_store::pages::page_lines(&full, p).ok_or_else(|| {
+                        store_err(StoreError::NoSuchPage {
+                            source_hash: entry.hash.clone(),
+                            page: p,
+                            last: marked.last().copied().unwrap_or(0),
+                        })
+                    })?)
+                }
+                (None, None, None) => None,
+                (None, s, e) => Some(s.unwrap_or(1)..=e.unwrap_or(usize::MAX)),
             };
             let text = raw.read_text(&entry, lines).map_err(store_err)?;
             let meta = &entry.meta;
@@ -282,6 +296,10 @@ impl Kernel {
                 "url": meta.url,
                 "added": meta.added,
                 "driver": meta.driver,
+                "derived_from": meta.derived_from,
+                "converter": meta.converter,
+                "method": meta.method,
+                "pages": marked.len(),
                 "text": text,
             }))
         })
@@ -295,7 +313,15 @@ impl Kernel {
                 .iter()
                 .map(|e| {
                     let m = &e.meta;
-                    json!({"hash": e.hash, "title": m.title, "url": m.url, "added": m.added, "driver": m.driver})
+                    json!({
+                        "hash": e.hash,
+                        "title": m.title,
+                        "url": m.url,
+                        "added": m.added,
+                        "driver": m.driver,
+                        "derived_from": m.derived_from,
+                        "method": m.method,
+                    })
                 })
                 .collect();
             to_json(&sources)
@@ -413,7 +439,10 @@ impl Kernel {
     }
 
     /// Stores a raw source and journals it, then refreshes the index. Returns the source and whether it was new.
-    #[pyo3(signature = (data, extension = None, title = None, url = None, driver = None, by = "owner"))]
+    #[pyo3(signature = (
+        data, extension = None, title = None, url = None, driver = None, by = "owner", derived_from = None,
+        converter = None, method = None
+    ))]
     #[allow(clippy::too_many_arguments)]
     fn add_source(
         &self,
@@ -424,23 +453,40 @@ impl Kernel {
         url: Option<String>,
         driver: Option<String>,
         by: &str,
+        derived_from: Option<String>,
+        converter: Option<String>,
+        method: Option<String>,
     ) -> PyResult<String> {
         let meta = RawMeta {
             title,
             url,
             driver,
+            derived_from,
+            converter,
+            method,
             ..RawMeta::default()
         };
         py.detach(|| {
-            let added =
-                edda_kernel::add_source(&self.vault, data, extension, &meta, by).map_err(gate_err)?;
+            let added = edda_kernel::add_source(&self.vault, data, extension, &meta, by)
+                .map_err(gate_err)?;
             if added.entry.is_some() {
                 let fresh = Index::open(&self.vault).map_err(index_err)?;
-                *self.index.write().map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
+                *self
+                    .index
+                    .write()
+                    .map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
             }
             let m = &added.source.meta;
             to_json(&json!({
-                "source": {"hash": added.source.hash, "title": m.title, "url": m.url, "added": m.added, "driver": m.driver},
+                "source": {
+                    "hash": added.source.hash,
+                    "title": m.title,
+                    "url": m.url,
+                    "added": m.added,
+                    "driver": m.driver,
+                    "derived_from": m.derived_from,
+                    "method": m.method,
+                },
                 "added": added.entry.is_some(),
             }))
         })

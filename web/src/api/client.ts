@@ -17,6 +17,7 @@ export type PageRevision = Schemas['PageRevision']
 export type AcceptRequest = Schemas['AcceptRequest']
 export type Decision = Schemas['Decision']
 export type JobRun = Schemas['JobRun']
+export type DocumentImport = Schemas['DocumentImport']
 
 export class ApiError extends Error {
   readonly status: number
@@ -63,11 +64,17 @@ export const api = {
       { filename: file.name },
       { method: 'POST', body: file, headers: { 'Content-Type': 'text/markdown' } },
     ),
+  importDocument: (file: File) =>
+    request<DocumentImport>(
+      '/api/sources/document',
+      { filename: file.name },
+      { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } },
+    ),
   importWeb: (url: string, title?: string) => request<AddedSource>('/api/sources/web', {}, post({ url, title })),
   page: (id: string) => request<Page>(`/api/pages/${pagePath(id)}`),
   links: (id: string) => request<Links>(`/api/links/${pagePath(id)}`),
   search: (q: string, k = 20) => request<SearchHit[]>('/api/search', { q, k }),
-  source: (hash: string, lines: { start?: number; end?: number } = {}) =>
+  source: (hash: string, lines: { start?: number; end?: number; page?: number } = {}) =>
     request<Source>(`/api/sources/${encodeURIComponent(hash)}`, lines),
   proposals: (status?: string) => request<Proposal[]>('/api/proposals', { status }),
   proposal: (id: string) => request<Proposal>(`/api/proposals/${encodeURIComponent(id)}`),

@@ -11,6 +11,7 @@ from typing import Annotated
 import httpx
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel
@@ -18,7 +19,7 @@ from pydantic import BaseModel
 from edda import okf_version, review
 from edda.api.events import Events, stream
 from edda.config import ConfigError, load_config
-from edda.drivers import DriverError, FetchFailed, NotAllowed, import_markdown, import_url
+from edda.drivers import DriverError, FetchFailed, NotAllowed, import_document, import_markdown, import_url
 from edda.jobs.background import Jobs, Progress
 from edda.kernel import ConflictError, InvalidRequestError, Kernel, NotFoundError
 from edda.log import configure_logging
@@ -27,6 +28,7 @@ from edda.models import (
     AcceptTogetherRequest,
     AddedSource,
     Decision,
+    DocumentImport,
     GraphIssues,
     IngestRequest,
     JobOutcome,
@@ -48,6 +50,7 @@ log = structlog.get_logger("edda.api")
 
 VAULT_ENV = "EDDA_VAULT"
 MAX_UPLOAD_BYTES = 10_000_000
+MAX_DOCUMENT_BYTES = 50_000_000
 
 Ingest = Callable[[Kernel, str, Progress], JobOutcome]
 
@@ -260,6 +263,34 @@ def create_app(
         return added
 
     @app.post(
+        "/api/sources/document",
+        tags=["sources"],
+        status_code=201,
+        responses={200: {"model": DocumentImport, "description": "The same document was already converted"}},
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}},
+            }
+        },
+    )
+    async def import_document_source(
+        request: Request,
+        response: Response,
+        kernel: KernelDep,
+        filename: Annotated[str, Query(min_length=1, description="The file's name; its extension picks the lane")],
+        title: Annotated[str | None, Query(description="Overrides the title read from the document")] = None,
+    ) -> DocumentImport:
+        """Stores an Office file, PDF or image unedited, with the Markdown made from it as a second source."""
+        data = await request.body()
+        if len(data) > MAX_DOCUMENT_BYTES:
+            raise HTTPException(413, f"documents are limited to {MAX_DOCUMENT_BYTES} bytes")
+        imported = await run_in_threadpool(import_document, kernel, data, filename=filename, title=title)
+        if not imported.derived.added:
+            response.status_code = 200
+        return imported
+
+    @app.post(
         "/api/sources/web",
         tags=["sources"],
         status_code=201,
@@ -304,8 +335,9 @@ def create_app(
         kernel: KernelDep,
         start: Annotated[int | None, Query(ge=1, description="First line, 1-based")] = None,
         end: Annotated[int | None, Query(ge=1, description="Last line, inclusive")] = None,
+        page: Annotated[int | None, Query(ge=1, description="One page of a source that marks its pages")] = None,
     ) -> Source:
-        return kernel.read_source(source_hash, start, end)
+        return kernel.read_source(source_hash, start, end, page)
 
     @app.get("/api/graph/issues", tags=["graph"])
     def graph_issues(kernel: KernelDep) -> GraphIssues:

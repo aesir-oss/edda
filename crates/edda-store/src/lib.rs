@@ -9,6 +9,7 @@ mod generated;
 pub mod markdown;
 mod page;
 mod page_id;
+pub mod pages;
 mod proposal;
 mod raw;
 mod vault;

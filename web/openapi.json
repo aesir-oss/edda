@@ -172,6 +172,23 @@
         "title": "Decision",
         "type": "object"
       },
+      "DocumentImport": {
+        "description": "A document as stored, unedited, and the Markdown source made from it.",
+        "properties": {
+          "derived": {
+            "$ref": "#/components/schemas/AddedSource"
+          },
+          "original": {
+            "$ref": "#/components/schemas/AddedSource"
+          }
+        },
+        "required": [
+          "original",
+          "derived"
+        ],
+        "title": "DocumentImport",
+        "type": "object"
+      },
       "EditChange": {
         "description": "``propose_edit``: text edits to an existing page, made against revision ``base_rev``.",
         "properties": {
@@ -976,6 +993,28 @@
             ],
             "title": "Added"
           },
+          "converter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Converter"
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From"
+          },
           "driver": {
             "anyOf": [
               {
@@ -990,6 +1029,22 @@
           "hash": {
             "title": "Hash",
             "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "pages": {
+            "default": 0,
+            "title": "Pages",
+            "type": "integer"
           },
           "text": {
             "title": "Text",
@@ -1039,6 +1094,17 @@
             ],
             "title": "Added"
           },
+          "derived_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Derived From"
+          },
           "driver": {
             "anyOf": [
               {
@@ -1053,6 +1119,17 @@
           "hash": {
             "title": "Hash",
             "type": "string"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
           },
           "title": {
             "anyOf": [
@@ -2009,6 +2086,91 @@
         ]
       }
     },
+    "/api/sources/document": {
+      "post": {
+        "description": "Stores an Office file, PDF or image unedited, with the Markdown made from it as a second source.",
+        "operationId": "import_document_source_api_sources_document_post",
+        "parameters": [
+          {
+            "description": "The file's name; its extension picks the lane",
+            "in": "query",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "description": "The file's name; its extension picks the lane",
+              "minLength": 1,
+              "title": "Filename",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Overrides the title read from the document",
+            "in": "query",
+            "name": "title",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Overrides the title read from the document",
+              "title": "Title"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentImport"
+                }
+              }
+            },
+            "description": "The same document was already converted"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentImport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Document Source",
+        "tags": [
+          "sources"
+        ]
+      }
+    },
     "/api/sources/markdown": {
       "post": {
         "description": "Stores the request body, a Markdown file, unedited as a raw source.",
@@ -2224,6 +2386,25 @@
               ],
               "description": "Last line, inclusive",
               "title": "End"
+            }
+          },
+          {
+            "description": "One page of a source that marks its pages",
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One page of a source that marks its pages",
+              "title": "Page"
             }
           }
         ],

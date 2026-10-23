@@ -13,7 +13,7 @@ test('uploads the chosen file and says what happened', async () => {
     '/api/sources/markdown': () => ({ source: { hash: 'ab'.repeat(32), title: added ? 'Notes' : null }, added }),
   })
   renderAt('/', <AddSource />)
-  const input = screen.getByLabelText('Add Markdown source')
+  const input = screen.getByLabelText('Add a file')
   fireEvent.change(input, { target: { files: [file('notes.md')] } })
   expect(await screen.findByText('Added Notes')).toBeInTheDocument()
   const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
@@ -33,7 +33,7 @@ test('offers to ingest what it added', async () => {
     '/api/jobs/ingest': { id: 'run_0001', job: 'ingest', target: 'ab'.repeat(32), state: 'queued', queued: 't' },
   })
   renderAt('/', <AddSource />)
-  fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('notes.md')] } })
+  fireEvent.change(screen.getByLabelText('Add a file'), { target: { files: [file('notes.md')] } })
   fireEvent.click(await screen.findByRole('button', { name: 'Ingest' }))
   expect(await screen.findByRole('link', { name: 'Review' })).toHaveAttribute('href', '/review')
   const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
@@ -44,18 +44,18 @@ test('offers to ingest what it added', async () => {
     '/api/sources/markdown': { source: { hash: 'cd'.repeat(32), title: 'More' }, added: true },
     '/api/jobs/ingest': { status: 400, detail: 'no model' },
   })
-  fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('more.md')] } })
+  fireEvent.change(screen.getByLabelText('Add a file'), { target: { files: [file('more.md')] } })
   expect(await screen.findByText('Added More')).toBeInTheDocument()
 })
 
 test('names untitled sources by hash and shows errors', async () => {
   mockApi({ '/api/sources/markdown': () => ({ source: { hash: 'cd'.repeat(32), title: null }, added: true }) })
   renderAt('/', <AddSource />)
-  fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('x.md')] } })
+  fireEvent.change(screen.getByLabelText('Add a file'), { target: { files: [file('x.md')] } })
   expect(await screen.findByText(`Added ${'cd'.repeat(6)}`)).toBeInTheDocument()
 
   mockApi({ '/api/sources/markdown': { status: 400, detail: 'the file is empty' } })
-  fireEvent.change(screen.getByLabelText('Add Markdown source'), { target: { files: [file('y.md')] } })
+  fireEvent.change(screen.getByLabelText('Add a file'), { target: { files: [file('y.md')] } })
   expect(await screen.findByRole('alert')).toHaveTextContent('the file is empty')
 })
 
@@ -81,4 +81,24 @@ test('adds a web page by address', async () => {
   fireEvent.submit(address.closest('form') as HTMLFormElement)
   expect(await screen.findByRole('alert')).toHaveTextContent('not in [network] allow')
   expect(address).toHaveValue('https://example.com/')
+})
+
+test('sends documents to the document importer and offers to ingest the Markdown made from them', async () => {
+  const derived = { source: { hash: 'md'.repeat(32), title: 'Lantern protocol', derived_from: 'pd'.repeat(32) }, added: true }
+  const fetchMock = mockApi({
+    '/api/sources/document': { original: { source: { hash: 'pd'.repeat(32), title: 'Lantern protocol' }, added: true }, derived },
+    '/api/jobs/ingest': { id: 'run_0001', job: 'ingest', target: 'md'.repeat(32), state: 'queued', queued: 't' },
+  })
+  renderAt('/', <AddSource />)
+  const pdf = new File(['%PDF-1.7'], 'Lantern.PDF', { type: 'application/pdf' })
+  fireEvent.change(screen.getByLabelText('Add a file'), { target: { files: [pdf] } })
+  expect(await screen.findByText('Added Lantern protocol')).toBeInTheDocument()
+  const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+  expect(url).toBe('/api/sources/document?filename=Lantern.PDF')
+  expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/octet-stream')
+  fireEvent.click(screen.getByRole('button', { name: 'Ingest' }))
+  await screen.findByRole('link', { name: 'Review' })
+  expect(JSON.parse(String((fetchMock.mock.calls[1] as unknown as [string, RequestInit])[1].body))).toEqual({
+    source: 'md'.repeat(32),
+  })
 })
