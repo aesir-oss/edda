@@ -188,6 +188,24 @@ class Kernel:
             entry = JournalEntry.model_validate_json(self._kernel.accept(proposal_id, by))
         return self._decided(proposal_id, "accepted", entry)
 
+    def accept_together(self, proposal_ids: list[str], by: str = "owner") -> list[JournalEntry]:
+        """Accepts several pending proposals as one change; links between the new pages they create resolve.
+
+        Every proposal is checked against the set before anything is written; if one is blocked, none is applied.
+        Returns the journal entries in the order they were written: new pages, then edits, then flags.
+
+        Raises:
+            ConflictError: A page changed since its proposal's base revision.
+            InvalidRequestError: The set is too small, repeats a proposal or a page, or breaks a kernel rule.
+        """
+        with self.writes:
+            entries = _entries.validate_json(self._kernel.accept_together(proposal_ids, by))
+        for entry in entries:
+            proposal_id = entry.data["proposal"] if isinstance(entry.data, dict) else None
+            if isinstance(proposal_id, str):
+                self._decided(proposal_id, "accepted", entry)
+        return entries
+
     def reject(self, proposal_id: str, reason: str, by: str = "owner") -> JournalEntry:
         """Rejects a pending proposal; the page is untouched. Returns the journal entry it wrote."""
         with self.writes:

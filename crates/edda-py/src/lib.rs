@@ -79,6 +79,7 @@ fn gate_err(e: edda_kernel::KernelError) -> PyErr {
         missing @ edda_kernel::KernelError::NoSuchRevision { .. } => {
             NotFoundError::new_err(missing.to_string())
         }
+        set @ edda_kernel::KernelError::Set(_) => InvalidRequestError::new_err(set.to_string()),
     }
 }
 
@@ -456,6 +457,28 @@ impl Kernel {
                 .write()
                 .map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
             to_json(&outcome.entry)
+        })
+    }
+
+    /// Accepts several pending proposals as one change, so pages that link to each other can land together, then
+    /// refreshes the index. Returns the journal entries, in the order they were written.
+    #[pyo3(signature = (proposals, by = "owner"))]
+    fn accept_together(
+        &self,
+        py: Python<'_>,
+        proposals: Vec<String>,
+        by: &str,
+    ) -> PyResult<String> {
+        py.detach(|| {
+            let outcomes =
+                edda_kernel::accept_together(&self.vault, &proposals, by).map_err(gate_err)?;
+            let fresh = Index::open(&self.vault).map_err(index_err)?;
+            *self
+                .index
+                .write()
+                .map_err(|e| KernelError::new_err(e.to_string()))? = fresh;
+            let entries: Vec<_> = outcomes.iter().map(|o| &o.entry).collect();
+            to_json(&entries)
         })
     }
 

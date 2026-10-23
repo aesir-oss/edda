@@ -5,8 +5,8 @@
 
 use edda_journal::{Entry, Journal, JournalError, NewEntry, write_log};
 use edda_store::{
-    Change, Generated, OWNER, Page, PageId, Proposal, RawEntry, RawMeta, Status, StoreError, Vault,
-    Verification, sha256_hex,
+    Change, Generated, OWNER, Page, PageId, Preview, Proposal, RawEntry, RawMeta, Status,
+    StoreError, Vault, Verification, sha256_hex,
 };
 use serde_json::json;
 
@@ -76,6 +76,8 @@ pub enum KernelError {
     Blocked { id: String, issues: Vec<String> },
     #[error("{page} has no journaled revision {rev} to roll back to")]
     NoSuchRevision { page: String, rev: u64 },
+    #[error("{0}")]
+    Set(String),
 }
 
 pub type Result<T, E = KernelError> = std::result::Result<T, E>;
@@ -107,10 +109,7 @@ pub fn accept(vault: &Vault, id: &str, by: &str) -> Result<Outcome> {
 /// Applies a pending proposal. `verified` is false when policy applied it with no person involved: the change then
 /// gets no `verified` entry, so the two can be told apart.
 pub fn apply(vault: &Vault, id: &str, by: &str, verified: bool) -> Result<Outcome> {
-    let proposal = vault.proposal(id)?;
-    if proposal.status != Status::Pending {
-        return Err(StoreError::NotPending(proposal.id).into());
-    }
+    let proposal = pending(vault, id)?;
     let preview = vault.preview(&proposal)?;
     if !preview.issues.is_empty() {
         return Err(KernelError::Blocked {
@@ -118,8 +117,98 @@ pub fn apply(vault: &Vault, id: &str, by: &str, verified: bool) -> Result<Outcom
             issues: preview.issues,
         });
     }
-    let at = now();
     let mut journal = Journal::open(vault.journal_dir())?;
+    let outcome = write(vault, &mut journal, proposal, preview, by, verified)?;
+    vault.write_index()?;
+    write_log(vault)?;
+    Ok(outcome)
+}
+
+/// Accepts several pending proposals as one change, on behalf of `by`: links between the new pages they create
+/// resolve, so pages that link to each other can land together. Every proposal is checked against the set before
+/// anything is written; if any breaks a rule, none is applied. New pages are written first, then edits, then flags,
+/// each journaled as it would be on its own.
+pub fn accept_together(vault: &Vault, ids: &[String], by: &str) -> Result<Vec<Outcome>> {
+    if ids.len() < 2 {
+        return Err(KernelError::Set(
+            "accept at least two proposals together, or accept one on its own".into(),
+        ));
+    }
+    let mut proposals: Vec<Proposal> = Vec::with_capacity(ids.len());
+    for id in ids {
+        let proposal = pending(vault, id)?;
+        if let Some(other) = proposals.iter().find(|p| p.id == proposal.id) {
+            return Err(KernelError::Set(format!("{} is listed twice", other.id)));
+        }
+        if let Some(other) = proposals
+            .iter()
+            .find(|p| p.change.page() == proposal.change.page())
+        {
+            return Err(KernelError::Set(format!(
+                "{} and {} both change {}; accept them one at a time",
+                other.id,
+                proposal.id,
+                proposal.change.page()
+            )));
+        }
+        proposals.push(proposal);
+    }
+    let new_pages = proposals
+        .iter()
+        .filter(|p| matches!(p.change, Change::NewPage { .. }))
+        .map(|p| PageId::new(p.change.page()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut checked = Vec::with_capacity(proposals.len());
+    let mut issues = Vec::new();
+    for proposal in proposals {
+        let preview = vault.preview_with(&proposal, &new_pages)?;
+        issues.extend(
+            preview
+                .issues
+                .iter()
+                .map(|issue| format!("{}: {issue}", proposal.id)),
+        );
+        checked.push((proposal, preview));
+    }
+    if !issues.is_empty() {
+        return Err(KernelError::Blocked {
+            id: ids.join(", "),
+            issues,
+        });
+    }
+    checked.sort_by_key(|(p, _)| match p.change {
+        Change::NewPage { .. } => 0,
+        Change::Edit { .. } => 1,
+        Change::Flag { .. } => 2,
+    });
+    let mut journal = Journal::open(vault.journal_dir())?;
+    let outcomes = checked
+        .into_iter()
+        .map(|(proposal, preview)| write(vault, &mut journal, proposal, preview, by, true))
+        .collect::<Result<Vec<_>>>()?;
+    vault.write_index()?;
+    write_log(vault)?;
+    Ok(outcomes)
+}
+
+fn pending(vault: &Vault, id: &str) -> Result<Proposal> {
+    let proposal = vault.proposal(id)?;
+    if proposal.status != Status::Pending {
+        return Err(StoreError::NotPending(proposal.id).into());
+    }
+    Ok(proposal)
+}
+
+/// Writes a checked proposal's page, journals it and marks the proposal accepted.
+fn write(
+    vault: &Vault,
+    journal: &mut Journal,
+    proposal: Proposal,
+    preview: Preview,
+    by: &str,
+    verified: bool,
+) -> Result<Outcome> {
+    let at = now();
     let (action, rev, page) = match (&proposal.change, preview.page) {
         (Change::Flag { flag, .. }, _) => (format!("flag:{flag}"), None, None),
         (change, Some(mut page)) => {
@@ -162,8 +251,6 @@ pub fn apply(vault: &Vault, id: &str, by: &str, verified: bool) -> Result<Outcom
         data: json!({ "proposal": proposal.id, "job": proposal.job, "verified": verified, "content": content }),
     })?;
     let proposal = vault.set_proposal_status(&proposal.id, Status::Accepted)?;
-    vault.write_index()?;
-    write_log(vault)?;
     Ok(Outcome {
         proposal,
         entry,
@@ -291,6 +378,158 @@ mod tests {
         vault
             .read_page(&PageId::new("attention.md").unwrap())
             .unwrap()
+    }
+
+    fn new_page(id: &str, links_to: &str) -> Change {
+        Change::NewPage {
+            page: id.into(),
+            kind: "Concept".into(),
+            title: id.trim_end_matches(".md").into(),
+            description: "d".into(),
+            tags: vec![],
+            body: format!("See [the other](/{links_to})."),
+        }
+    }
+
+    #[test]
+    fn pages_that_link_to_each_other_are_accepted_together() {
+        let (_dir, vault, _hash) = vault();
+        let a = vault
+            .propose(OWNER, new_page("devin.md", "deepwiki.md"), "a")
+            .unwrap();
+        let b = vault
+            .propose(OWNER, new_page("deepwiki.md", "devin.md"), "b")
+            .unwrap();
+        let e = vault
+            .propose(OWNER, edit(2, "values. See [Devin](/devin.md)."), "e")
+            .unwrap();
+        assert!(matches!(
+            accept(&vault, &a.id, "owner"),
+            Err(KernelError::Blocked { .. })
+        ));
+
+        let ids = vec![e.id.clone(), a.id.clone(), b.id.clone()];
+        let outcomes = accept_together(&vault, &ids, "owner").unwrap();
+        let actions: Vec<_> = outcomes
+            .iter()
+            .map(|o| (o.proposal.id.as_str(), o.entry.action.as_str()))
+            .collect();
+        assert_eq!(
+            actions,
+            [
+                (a.id.as_str(), "create_page"),
+                (b.id.as_str(), "create_page"),
+                (e.id.as_str(), "edit_page")
+            ]
+        );
+        assert!(vault.page_exists(&PageId::new("devin.md").unwrap()));
+        assert!(read(&vault).body.contains("[Devin](/devin.md)"));
+        assert!(
+            outcomes
+                .iter()
+                .all(|o| o.proposal.status == Status::Accepted)
+        );
+        let log = fs::read_to_string(vault.wiki_dir().join("log.md")).unwrap();
+        assert!(log.contains("/devin.md") && log.contains("/deepwiki.md"));
+        assert_eq!(
+            Journal::open(vault.journal_dir())
+                .unwrap()
+                .verify()
+                .unwrap(),
+            3
+        );
+    }
+
+    #[test]
+    fn a_set_with_any_issue_writes_nothing() {
+        let (_dir, vault, _hash) = vault();
+        let a = vault
+            .propose(OWNER, new_page("devin.md", "deepwiki.md"), "a")
+            .unwrap();
+        let b = vault
+            .propose(OWNER, new_page("fusion.md", "nowhere.md"), "b")
+            .unwrap();
+        let ids = vec![a.id.clone(), b.id.clone()];
+        let Err(KernelError::Blocked { id, issues }) = accept_together(&vault, &ids, "owner")
+        else {
+            panic!("expected the set to be blocked");
+        };
+        assert_eq!(id, format!("{}, {}", a.id, b.id));
+        assert_eq!(
+            issues,
+            [
+                format!(
+                    "{}: link /deepwiki.md points to a page that does not exist",
+                    a.id
+                ),
+                format!(
+                    "{}: link /nowhere.md points to a page that does not exist",
+                    b.id
+                ),
+            ]
+        );
+        assert!(!vault.page_exists(&PageId::new("devin.md").unwrap()));
+        assert_eq!(vault.proposal(&a.id).unwrap().status, Status::Pending);
+        assert!(!vault.journal_dir().join("000001.jsonl").exists());
+    }
+
+    #[test]
+    fn refuses_sets_it_cannot_apply_in_one_step() {
+        let (_dir, vault, _hash) = vault();
+        let one = vault.propose(OWNER, edit(2, "values!"), "one").unwrap();
+        let two = vault.propose(OWNER, edit(2, "values?"), "two").unwrap();
+        let set = |ids: &[&String]| ids.iter().map(|s| (*s).clone()).collect::<Vec<_>>();
+        let message = |r: Result<Vec<Outcome>>| match r {
+            Err(KernelError::Set(m)) => m,
+            other => panic!("expected a set error, got {:?}", other.map(|o| o.len())),
+        };
+        assert!(
+            message(accept_together(&vault, &set(&[&one.id]), "owner")).contains("at least two")
+        );
+        assert_eq!(
+            message(accept_together(&vault, &set(&[&one.id, &one.id]), "owner")),
+            format!("{} is listed twice", one.id)
+        );
+        assert!(
+            message(accept_together(&vault, &set(&[&one.id, &two.id]), "owner"))
+                .contains("both change attention.md")
+        );
+        reject(&vault, &two.id, "owner", "no").unwrap();
+        let flag = vault
+            .propose(
+                "lint",
+                Change::Flag {
+                    page: "attention.md".into(),
+                    flag: "gap".into(),
+                    note: "n".into(),
+                },
+                "f",
+            )
+            .unwrap();
+        assert!(matches!(
+            accept_together(&vault, &set(&[&one.id, &two.id]), "owner"),
+            Err(KernelError::Store(StoreError::NotPending(_)))
+        ));
+        assert!(
+            message(accept_together(&vault, &set(&[&one.id, &flag.id]), "owner"))
+                .contains("both change")
+        );
+    }
+
+    #[test]
+    fn a_new_page_that_exists_by_now_is_not_overwritten() {
+        let (_dir, vault, _hash) = vault();
+        let first = vault
+            .propose(OWNER, new_page("devin.md", "attention.md"), "first")
+            .unwrap();
+        let second = vault
+            .propose(OWNER, new_page("devin.md", "attention.md"), "second")
+            .unwrap();
+        accept(&vault, &first.id, "owner").unwrap();
+        let Err(KernelError::Blocked { issues, .. }) = accept(&vault, &second.id, "owner") else {
+            panic!("expected the second page to be blocked");
+        };
+        assert_eq!(issues, ["devin.md already exists"]);
     }
 
     #[test]

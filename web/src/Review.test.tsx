@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router'
 import { afterEach, expect, test, vi } from 'vitest'
+import type { Proposal } from './api/client'
 import { editProposal, flagProposal, pageProposal } from './fixtures'
 import { Diff, Review } from './Review'
 import { mockApi, renderAt } from './test-utils'
@@ -148,4 +149,57 @@ test('a cited source that cannot be read says so', async () => {
 test('an empty diff renders nothing', () => {
   const { container } = renderAt('/', <Diff text="" />)
   expect(container).toBeEmptyDOMElement()
+})
+
+const linked = (id: string, page: string, other: string): Proposal => ({
+  ...pageProposal,
+  id,
+  change: { ...pageProposal.change, kind: 'new_page', page, title: page, description: 'd', body: `See /${other}.\n`, type: 'Concept' },
+  preview: { diff: `+See /${other}.\n`, issues: [`link /${other} points to a page that does not exist`] },
+})
+
+test('offers to accept pages that link to each other together', async () => {
+  const devin = linked('prop_000010', 'concepts/devin.md', 'concepts/deepwiki.md')
+  const deepwiki = linked('prop_000011', 'concepts/deepwiki.md', 'concepts/devin.md')
+  const fetchMock = mockApi({
+    '/api/proposals': [devin, deepwiki],
+    '/api/proposals/prop_000010': devin,
+    '/api/proposals/prop_000011': deepwiki,
+    '/api/jobs': [],
+    '/api/proposals/accept-together': [decision, decision],
+  })
+  renderReview('/review/prop_000010')
+  const article = await screen.findByRole('article', { name: 'Proposal prop_000010' })
+  expect(within(article).getByText(/It links to concepts\/deepwiki\.md, which another proposal creates/)).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /together/ })).toBeNull()
+
+  fireEvent.click(within(article).getByRole('button', { name: 'Select both' }))
+  expect(screen.getByLabelText('Select concepts/devin.md')).toBeChecked()
+  expect(screen.getByLabelText('Select concepts/deepwiki.md')).toBeChecked()
+  fireEvent.click(screen.getByRole('button', { name: 'Accept 2 together' }))
+  await waitFor(() => expect(call(fetchMock, '/api/proposals/accept-together')).toBeDefined())
+  expect(JSON.parse(String(call(fetchMock, '/api/proposals/accept-together')?.[1].body))).toEqual({
+    ids: ['prop_000010', 'prop_000011'],
+  })
+  await waitFor(() => expect(screen.getByLabelText('Select concepts/devin.md')).not.toBeChecked())
+})
+
+test('selection by hand, and refusals of the whole set', async () => {
+  const fetchMock = routes({
+    '/api/proposals/accept-together': { status: 400, detail: 'prop_000002: added text cites no source: "Zebras."' },
+  })
+  renderReview('/review/prop_000001')
+  await screen.findByRole('article', { name: 'Proposal prop_000001' })
+  expect(screen.queryByText(/accept them together/)).toBeNull()
+  fireEvent.click(screen.getByLabelText('Select zebra.md'))
+  expect(screen.queryByRole('button', { name: /together/ })).toBeNull()
+  const boxes = screen.getAllByLabelText('Select bm25.md')
+  fireEvent.click(boxes[0] as HTMLElement)
+  fireEvent.click(boxes[1] as HTMLElement)
+  fireEvent.click(boxes[1] as HTMLElement)
+  fireEvent.click(screen.getByRole('button', { name: 'Accept 2 together' }))
+  expect(await screen.findByText(/cites no source: "Zebras\."/)).toBeInTheDocument()
+  expect(JSON.parse(String(call(fetchMock, '/api/proposals/accept-together')?.[1].body))).toEqual({
+    ids: ['prop_000002', 'prop_000001'],
+  })
 })

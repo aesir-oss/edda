@@ -103,3 +103,35 @@ def test_writes_are_reported_to_listeners(vault_copy: Path) -> None:
     assert heard[0][1] == {"id": proposal, "status": "pending", "page": "bm25.md", "job": "ingest:test"}
     assert heard[2][1] == {"id": proposal, "status": "accepted", "page": "bm25.md", "job": None}
     assert heard[6][1]["added"] is True
+
+
+def test_pages_that_link_to_each_other_are_accepted_together(vault_copy: Path) -> None:
+    kernel = Kernel(vault_copy)
+    heard: list[tuple[str, dict[str, Any]]] = []
+    kernel.listen(lambda event, data: heard.append((event, data)))
+    ids = []
+    for page, other in [("devin.md", "deepwiki.md"), ("deepwiki.md", "devin.md")]:
+        proposal = kernel.propose_page(
+            "ingest:test",
+            f"concepts/{page}",
+            type="Concept",
+            title=page.removesuffix(".md").title(),
+            description="d",
+            body=f"It reads notes, see [the other](/concepts/{other}).\n",
+            rationale=f"adds {page}",
+        )
+        kernel.cite(proposal.id, "It reads notes", PAPER, "Section 1")
+        ids.append(proposal.id)
+    with pytest.raises(InvalidRequestError, match=r"concepts/deepwiki\.md points to a page that does not exist"):
+        review.accept(kernel, ids[0])
+
+    decisions = review.accept_together(kernel, ids)
+    assert [(d.proposal.id, d.proposal.status, d.entry.action) for d in decisions] == [
+        (ids[0], "accepted", "create_page"),
+        (ids[1], "accepted", "create_page"),
+    ]
+    assert kernel.read_page("concepts/devin.md").title == "Devin"
+    assert kernel.links("concepts/devin.md").backlinks == ["concepts/deepwiki.md"]
+    assert [d["status"] for e, d in heard if e == "proposal"][-2:] == ["accepted", "accepted"]
+    with pytest.raises(InvalidRequestError, match="at least two"):
+        kernel.accept_together([ids[0]])

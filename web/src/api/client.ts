@@ -73,6 +73,7 @@ export const api = {
   proposal: (id: string) => request<Proposal>(`/api/proposals/${encodeURIComponent(id)}`),
   accept: (id: string, revision: AcceptRequest = {}) =>
     request<Decision>(`/api/proposals/${encodeURIComponent(id)}/accept`, {}, post(revision)),
+  acceptTogether: (ids: string[]) => request<Decision[]>('/api/proposals/accept-together', {}, post({ ids })),
   reject: (id: string, reason: string) =>
     request<Decision>(`/api/proposals/${encodeURIComponent(id)}/reject`, {}, post({ reason })),
   jobs: () => request<JobRun[]>('/api/jobs'),

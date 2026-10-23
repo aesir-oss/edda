@@ -110,3 +110,16 @@ def test_the_event_stream_starts_with_ready_and_ends_on_shutdown(kernel: MagicMo
         assert response.headers["content-type"].startswith("text/event-stream")
         body = "".join(response.iter_text())
     assert body.startswith("event: ready\ndata: {}")
+
+
+def test_accepts_several_proposals_together(kernel: MagicMock) -> None:
+    kernel.accept_together.return_value = [
+        _entry("create_page").model_copy(update={"data": {"proposal": "prop_000002"}}),
+        _entry("create_page").model_copy(update={"data": {"proposal": "prop_000001"}}),
+    ]
+    client = TestClient(create_app(kernel=kernel))
+    response = client.post("/api/proposals/accept-together", json={"ids": ["prop_000001", "prop_000002"]})
+    assert response.status_code == 200
+    assert [d["proposal"]["id"] for d in response.json()] == ["prop_000002", "prop_000001"]
+    kernel.accept_together.assert_called_once_with(["prop_000001", "prop_000002"], "owner")
+    assert client.post("/api/proposals/accept-together", json={"ids": ["prop_000001"]}).status_code == 422

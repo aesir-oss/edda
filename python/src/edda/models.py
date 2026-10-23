@@ -221,6 +221,12 @@ class AcceptRequest(_Model):
     page: PageRevision | None = None
 
 
+class AcceptTogetherRequest(_Model):
+    """Proposals to accept as one change: pages that link to each other can only land together."""
+
+    ids: list[str] = Field(min_length=2)
+
+
 class RejectRequest(_Model):
     """Why the owner turned a proposal down."""
 

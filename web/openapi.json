@@ -32,6 +32,24 @@
         "title": "AcceptRequest",
         "type": "object"
       },
+      "AcceptTogetherRequest": {
+        "description": "Proposals to accept as one change: pages that link to each other can only land together.",
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "AcceptTogetherRequest",
+        "type": "object"
+      },
       "AddedSource": {
         "description": "A source after an import; ``added`` is false when the same bytes were already stored.",
         "properties": {
@@ -1692,6 +1710,55 @@
           }
         },
         "summary": "List Proposals",
+        "tags": [
+          "proposals"
+        ]
+      }
+    },
+    "/api/proposals/accept-together": {
+      "post": {
+        "description": "Applies several proposals as one change: all of them, checked as a set, or none.",
+        "operationId": "accept_proposals_together_api_proposals_accept_together_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptTogetherRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Decision"
+                  },
+                  "title": "Response Accept Proposals Together Api Proposals Accept Together Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "A page changed since its proposal was made"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Proposals Together",
         "tags": [
           "proposals"
         ]

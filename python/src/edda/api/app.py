@@ -24,6 +24,7 @@ from edda.kernel import ConflictError, InvalidRequestError, Kernel, NotFoundErro
 from edda.log import configure_logging
 from edda.models import (
     AcceptRequest,
+    AcceptTogetherRequest,
     AddedSource,
     Decision,
     GraphIssues,
@@ -335,6 +336,15 @@ def create_app(
         """Applies a proposal, or the owner's revision of it (``edits`` for an edit, ``page`` for a new page)."""
         revision = body or AcceptRequest()
         return review.accept(kernel, proposal_id, edits=revision.edits, page=revision.page)
+
+    @app.post(
+        "/api/proposals/accept-together",
+        tags=["proposals"],
+        responses={409: {"description": "A page changed since its proposal was made"}},
+    )
+    def accept_proposals_together(body: AcceptTogetherRequest, kernel: KernelDep) -> list[Decision]:
+        """Applies several proposals as one change: all of them, checked as a set, or none."""
+        return review.accept_together(kernel, body.ids)
 
     @app.post("/api/proposals/{proposal_id}/reject", tags=["proposals"])
     def reject_proposal(proposal_id: str, body: RejectRequest, kernel: KernelDep) -> Decision:
