@@ -7,12 +7,13 @@ import pytest
 
 from edda.config import WebDriver
 from edda.drivers import DriverError, FetchFailed, NotAllowed, import_url
-from edda.drivers.web import _once
+from edda.drivers.web import _once, _unwrap
 from edda.kernel import Kernel
 from edda.models import AddedSource, SourceSummary
 from edda.policy import Network
 
-HTML = (Path(__file__).parents[1] / "fixtures" / "bm25.html").read_bytes()
+FIXTURES = Path(__file__).parents[1] / "fixtures"
+HTML = (FIXTURES / "bm25.html").read_bytes()
 NETWORK = Network(allow=["en.wikipedia.org", "*.example.org"])
 CONFIG = WebDriver(max_bytes=100_000)
 
@@ -50,6 +51,8 @@ def test_stores_the_readable_text_of_an_html_page(kernel: MagicMock) -> None:
     assert "| k1 | 1.2 |" in text
     assert text.count("bag-of-words") == 1
     assert "Cookie statement" not in text and "Random article" not in text
+    assert "](" not in text
+    assert "See also tf-idf, the weighting BM25 refines." in text
     assert kernel.add_source.call_args.kwargs["extension"] == "md"
     assert seen[0].headers["user-agent"].startswith("Edda/")
 
@@ -152,3 +155,33 @@ def test_prefers_the_pages_own_heading_to_its_html_title(kernel: MagicMock) -> N
     handler = lambda _: httpx.Response(200, content=html, headers={"content-type": "text/html"})  # noqa: E731
     added = import_url(kernel, "https://en.wikipedia.org/x", network=NETWORK, config=CONFIG, client=client(handler))
     assert added.source.title == "Okapi BM25"
+
+
+def test_leaves_out_mediawiki_furniture_and_keeps_the_prose_flowing(kernel: MagicMock) -> None:
+    html = (FIXTURES / "mediawiki.html").read_bytes()
+    handler = lambda _: httpx.Response(200, content=html, headers={"content-type": "text/html"})  # noqa: E731
+    url = "https://en.wikipedia.org/wiki/Lantern"
+    added = import_url(kernel, url, network=NETWORK, config=CONFIG, client=client(handler))
+    assert added.source.title == "Lantern protocol"
+    text = stored(kernel)
+    assert text.startswith("# Lantern protocol\n\n**Lantern** is a protocol and an API for reading notes from")
+    assert "knowledge bases over a slow link. It was written" in text
+    for furniture in ["Appearance", "Jump to content", "single source", "edit", "[1]", "↑", "Beacon", "Categories"]:
+        assert furniture not in text, furniture
+    assert "## History" in text
+    assert '- "Lantern: notes over slow links". *example.org*. Retrieved 1 May 2026.' in text
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("A\nwrapped\nline.", "A wrapped line."),
+        ("- one\n  more\n- two\n1. three", "- one more\n- two\n1. three"),
+        ("| a |\n|---|\n| 1 |", "| a |\n|---|\n| 1 |"),
+        ("```\ncode\nkept\n```", "```\ncode\nkept\n```"),
+        ("## Head\nText\nmore\n> quote\n> more", "## Head\nText more\n> quote\n> more"),
+        ("A\n\nB\nC", "A\n\nB C"),
+    ],
+)
+def test_joins_soft_line_breaks_only_inside_prose(text: str, expected: str) -> None:
+    assert _unwrap(text) == expected

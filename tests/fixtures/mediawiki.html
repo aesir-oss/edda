@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Lantern protocol - Examplepedia</title></head>
+<body>
+<a class="mw-jump-link" href="#content">Jump to content</a>
+<nav class="vector-appearance-landmark" aria-label="Appearance">
+  <div class="vector-pinnable-header"><div class="vector-pinnable-header-label">Appearance</div>
+  <button>move to sidebar</button><button>hide</button></div>
+</nav>
+<span class="vector-dropdown-label-text" aria-hidden="true">Appearance</span>
+<main id="content">
+<h1 id="firstHeading">Lantern protocol</h1>
+<div id="mw-content-text">
+<table class="box-One_source plainlinks metadata ambox ambox-content" role="presentation"><tr><td>
+This article relies on a <a href="/wiki/Help:Sources">single source</a>. (May 2026)</td></tr></table>
+<p><b>Lantern</b> is a
+<a href="/wiki/Protocol" title="Protocol">protocol</a>
+and an
+<a href="/wiki/API" title="API">API</a>
+for reading notes from
+<a href="/wiki/Knowledge_base" title="Knowledge base">knowledge bases</a>
+over a slow link.<sup class="mw-ref reference" id="cite_ref-1"><a href="#cite_note-1">[1]</a></sup> It was written
+for field stations that sync once a day, and it trades latency for a very small message format.</p>
+<p>A Lantern session opens with a hello message, sends one request per note, and closes when the queue is empty.
+Each request names the note by its content hash, so a retried request can never fetch the wrong note.</p>
+<h2>History<span class="mw-editsection"><span>[</span><a href="/w/index.php?title=Lantern&amp;action=edit&amp;section=1">edit</a><span>]</span></span></h2>
+<p>The first version was drafted in 2019 and revised twice after field trials showed that batching requests saved
+more time than compressing them.</p>
+<h2>References<span class="mw-editsection"><span>[</span><a href="/w/index.php?title=Lantern&amp;action=edit&amp;section=2">edit</a><span>]</span></span></h2>
+<ol class="references"><li id="cite_note-1"><span class="mw-cite-backlink"><a href="#cite_ref-1">↑</a></span>
+<span class="reference-text">"Lantern: notes over slow links". <i>example.org</i>. Retrieved 1 May 2026.</span></li></ol>
+<div class="navbox" role="navigation"><div>Knowledge protocols: Lantern · Beacon · Flare</div></div>
+<div class="noprint">Categories: Protocols</div>
+</div>
+</main>
+<footer>Text is available under a license. Privacy policy. About Examplepedia.</footer>
+</body>
+</html>
