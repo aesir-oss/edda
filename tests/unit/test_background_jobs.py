@@ -1,6 +1,8 @@
 import threading
 import time
 
+import pytest
+
 from edda.jobs.background import Jobs
 from edda.models import JobRun
 
@@ -63,3 +65,20 @@ def test_jobs_still_queued_at_shutdown_are_marked_failed() -> None:
     run = jobs.run(queued.id)
     assert run is not None
     assert (run.state, run.error) == ("failed", "the server stopped before the job ran")
+
+
+def test_expected_failures_are_one_log_line(capsys: pytest.CaptureFixture[str]) -> None:
+    from edda.llm.errors import LLMError
+
+    jobs = Jobs()
+
+    def offline() -> list[str]:
+        raise LLMError("http://127.0.0.1:8080/v1/chat/completions did not answer; is the model server running?")
+
+    run = jobs.start("ingest", "aaaa", offline)
+    jobs.wait(5)
+    failed = jobs.run(run.id)
+    assert failed is not None and failed.state == "failed"
+    out = capsys.readouterr().out
+    assert "is the model server running?" in out
+    assert "Traceback" not in out

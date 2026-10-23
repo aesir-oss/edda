@@ -332,3 +332,27 @@ def test_a_model_missing_from_a_hosted_account_says_so() -> None:
     local, _ = _local([httpx.Response(404, text="no such route")])
     with pytest.raises(LLMError, match="HTTP 404: no such route"):
         local.chat(model="m", system="s", turns=[], tools=[], max_tokens=5)
+
+
+def test_the_local_endpoint_sends_the_key_from_its_file(tmp_path: Path) -> None:
+    keyed = Endpoint(base_url="http://127.0.0.1:8080/v1", model="local", api_key_file="~/llm-key")
+    (tmp_path / "llm-key").write_text("# key\nlocal-secret\n")
+    provider = OpenAICompatibleProvider("local", keyed, env={"HOME": str(tmp_path)})
+    assert provider.client.headers["authorization"] == "Bearer local-secret"
+    assert provider.sent_key
+
+    (tmp_path / "llm-key").unlink()
+    keyless = OpenAICompatibleProvider("local", keyed, env={"HOME": str(tmp_path)})
+    assert "authorization" not in keyless.client.headers
+    remote = Endpoint(base_url="http://models.example.net/v1", model="m", api_key_file=str(tmp_path / "k"))
+    (tmp_path / "k").write_text("k\n")
+    with pytest.raises(ProviderNotConfigured, match="plain HTTP"):
+        OpenAICompatibleProvider("remote", remote)
+
+
+def test_a_server_that_wants_a_key_says_where_to_get_one(tmp_path: Path) -> None:
+    keyed = Endpoint(base_url="http://127.0.0.1:8080/v1", model="local", api_key_file="~/llm-key")
+    client = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(401, text="Invalid API Key")))
+    provider = OpenAICompatibleProvider("local", keyed, client=client, env={"HOME": str(tmp_path)}, retries=0)
+    with pytest.raises(ProviderNotConfigured, match=r"wants an API key \(HTTP 401\); `pixi run -e llm llm-serve`"):
+        provider.chat(model="local", system="s", turns=[UserTurn(text="hi")], tools=[], max_tokens=10)

@@ -6,6 +6,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: { '/api': process.env.EDDA_API ?? 'http://127.0.0.1:8000' },
+    // CI writes coverage reports into web/coverage; reloading the app for each one helps nobody.
+    watch: { ignored: ['**/coverage/**'] },
   },
   test: {
     environment: 'jsdom',

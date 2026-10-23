@@ -8,9 +8,16 @@ from datetime import UTC, datetime
 
 import structlog
 
+from edda.config import ConfigError
+from edda.drivers.errors import DriverError
+from edda.kernel import KernelError
+from edda.llm.errors import LLMError
 from edda.models import JobRun
 
 log = structlog.get_logger("edda.jobs.background")
+
+# Failures whose cause is outside the code, such as a model server that is not running: logged as one line.
+EXPECTED = (LLMError, KernelError, ConfigError, DriverError)
 
 Work = Callable[[], list[str]]
 Listener = Callable[[JobRun], None]
@@ -66,6 +73,10 @@ class Jobs:
         self._update(run_id, state="running", started=_now())
         try:
             proposals = work()
+        except EXPECTED as exc:
+            log.error("job_failed", run=run_id, error=str(exc))
+            self._update(run_id, state="failed", finished=_now(), error=str(exc) or type(exc).__name__)
+            return
         except Exception as exc:
             log.exception("job_failed", run=run_id)
             self._update(run_id, state="failed", finished=_now(), error=str(exc) or type(exc).__name__)

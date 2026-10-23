@@ -19,6 +19,10 @@ export function useVaultEvents() {
   useEffect(() => {
     if (typeof EventSource === 'undefined') return
     const source = new EventSource('/api/events')
+    // `ready` opens every connection, reconnects included. Anything may have changed while the stream was down, and a
+    // restarted API has forgotten its jobs, so every query refetches.
+    const ready = () => void queryClient.invalidateQueries()
+    source.addEventListener('ready', ready)
     const listeners = Object.keys(STALE).map((event) => {
       const listener = () => invalidateFor(queryClient, event)
       source.addEventListener(event, listener)
@@ -26,6 +30,7 @@ export function useVaultEvents() {
     })
     return () => {
       for (const [event, listener] of listeners) source.removeEventListener(event, listener)
+      source.removeEventListener('ready', ready)
       source.close()
     }
   }, [queryClient])

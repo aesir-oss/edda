@@ -6,6 +6,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A home folder per test, so no test reads the real ~/.cache/edda (the local model's key, downloaded weights)."""
+    path = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(path))
+    return path
+
+
 @pytest.fixture
 def example_vault() -> Path:
     return REPO_ROOT / "examples" / "vault"
