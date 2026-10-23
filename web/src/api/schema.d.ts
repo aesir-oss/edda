@@ -514,6 +514,10 @@ export interface components {
             id: string;
             /** Job */
             job: string;
+            /** Max Turns */
+            max_turns?: number | null;
+            /** Note */
+            note?: string | null;
             /** Proposals */
             proposals?: string[];
             /** Queued */
@@ -527,6 +531,8 @@ export interface components {
             state: "queued" | "running" | "done" | "failed";
             /** Target */
             target: string;
+            /** Turn */
+            turn?: number | null;
         };
         /**
          * JournalEntry

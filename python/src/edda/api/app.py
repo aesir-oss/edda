@@ -19,7 +19,7 @@ from edda import okf_version, review
 from edda.api.events import Events, stream
 from edda.config import ConfigError, load_config
 from edda.drivers import DriverError, FetchFailed, NotAllowed, import_markdown, import_url
-from edda.jobs.background import Jobs
+from edda.jobs.background import Jobs, Progress
 from edda.kernel import ConflictError, InvalidRequestError, Kernel, NotFoundError
 from edda.log import configure_logging
 from edda.models import (
@@ -28,6 +28,7 @@ from edda.models import (
     Decision,
     GraphIssues,
     IngestRequest,
+    JobOutcome,
     JobRun,
     JournalEntry,
     Links,
@@ -47,7 +48,7 @@ log = structlog.get_logger("edda.api")
 VAULT_ENV = "EDDA_VAULT"
 MAX_UPLOAD_BYTES = 10_000_000
 
-Ingest = Callable[[Kernel, str], list[str]]
+Ingest = Callable[[Kernel, str, Progress], JobOutcome]
 
 
 class VaultInfo(BaseModel):
@@ -100,13 +101,21 @@ def is_stale(stale_after: str | None, today: date) -> bool:
         return False
 
 
-def run_ingest(kernel: Kernel, source: str) -> list[str]:
-    """Runs the ingest job with the vault's own model settings; returns the ids of the proposals it made."""
+_NOTES = {
+    "turn_limit": "stopped at its limit of {turns} model turns; some of its proposals may be unfinished",
+    "max_tokens": "the model's last reply was cut off at max_output_tokens",
+    "refusal": "the model refused to continue",
+}
+
+
+def run_ingest(kernel: Kernel, source: str, progress: Progress) -> JobOutcome:
+    """Runs the ingest job with the vault's own model settings, reporting each turn; returns what it made."""
     from edda.jobs.ingest import ingest
     from edda.llm import LLM
 
     config = load_config(kernel.vault)
-    return ingest(kernel, LLM(config), config, source).proposals
+    result = ingest(kernel, LLM(config), config, source, on_turn=progress)
+    return JobOutcome(proposals=result.proposals, note=_NOTES.get(result.ending, "").format(turns=result.turns) or None)
 
 
 def create_app(
@@ -335,7 +344,7 @@ def create_app(
     def start_ingest(body: IngestRequest, kernel: KernelDep) -> JobRun:
         """Queues the ingest job for a raw source; its proposals arrive as events while it runs."""
         source = kernel.read_source(body.source).hash
-        return jobs.start("ingest", source, lambda: ingest(kernel, source))
+        return jobs.start("ingest", source, lambda progress: ingest(kernel, source, progress))
 
     @app.get("/api/jobs", tags=["jobs"])
     def list_jobs() -> list[JobRun]:

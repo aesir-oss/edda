@@ -21,6 +21,13 @@ Handler = Callable[[dict[str, Any]], Any]
 Ending = Literal["end", "max_tokens", "refusal", "turn_limit"]
 
 
+WRAP_UP_TURNS = 2
+WRAP_UP = (
+    f"Note from the job runner: you have {WRAP_UP_TURNS} model turns left. Finish citing what you have proposed, "
+    "propose nothing new, then reply with your one-sentence summary."
+)
+
+
 class ToolSpec(BaseModel):
     """A tool the model may call, and the function that runs it. A result that is not a string is sent as JSON."""
 
@@ -60,10 +67,12 @@ def run_job(
     tools: Sequence[ToolSpec],
     max_turns: int = 16,
     proposals: Callable[[], list[str]] | None = None,
+    on_turn: Callable[[int, int], None] | None = None,
 ) -> JobResult:
     """Runs the model with ``tools`` until it stops calling them, or ``max_turns`` model calls have been made.
 
-    ``proposals`` reports the ids of the proposals made so far, for the result.
+    ``proposals`` reports the ids of the proposals made so far, for the result; ``on_turn(turn, max_turns)`` hears
+    each model call as it starts. Two calls before the limit, the model is told to finish what it started.
     """
     by_name = {spec.tool.name: spec for spec in tools}
     turns: list[Turn] = [UserTurn(text=prompt)]
@@ -71,7 +80,9 @@ def run_job(
     ending: Ending = "turn_limit"
     provider, model = llm.provider_for(job)
     final_text = ""
-    for _ in range(max_turns):
+    for turn in range(1, max_turns + 1):
+        if on_turn is not None:
+            on_turn(turn, max_turns)
         result = llm.chat(job, job_id, system=system, turns=turns, tools=[s.tool for s in tools])
         provider, model = result.provider, result.model
         turns.append(result.turn)
@@ -85,6 +96,9 @@ def run_job(
             content, failed = _run(by_name.get(call.name), call.name, call.arguments)
             errors += failed
             outputs.append(ToolResult(call_id=call.id, content=content, is_error=failed))
+        if max_turns - turn == WRAP_UP_TURNS:
+            last = outputs[-1]
+            outputs[-1] = last.model_copy(update={"content": f"{last.content}\n\n{WRAP_UP}"})
         turns.append(ToolTurn(results=outputs))
     made = proposals() if proposals else []
     log.info("job_done", job=job, job_id=job_id, ending=ending, tool_calls=calls, tool_errors=errors, proposals=made)

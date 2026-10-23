@@ -247,6 +247,16 @@ class JobRun(_Model):
     finished: str | None = None
     proposals: list[str] = Field(default_factory=list)
     error: str | None = None
+    turn: int | None = None
+    max_turns: int | None = None
+    note: str | None = None
+
+
+class JobOutcome(_Model):
+    """What a finished job made, and a note when it stopped short, such as at its turn limit."""
+
+    proposals: list[str] = Field(default_factory=list)
+    note: str | None = None
 
 
 class IngestRequest(_Model):

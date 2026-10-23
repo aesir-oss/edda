@@ -125,7 +125,7 @@ test('shows running and failed jobs, an empty queue, and errors', async () => {
   })
   renderReview()
   expect(await screen.findByText('Nothing to review.')).toBeInTheDocument()
-  expect(await screen.findByText(/1 job running/)).toBeInTheDocument()
+  expect(await screen.findByText(/ingest ab12cd34 · running/)).toBeInTheDocument()
   expect(screen.getByRole('alert')).toHaveTextContent('ingest ff00ff00 failed: model went away')
 
   mockApi({ '/api/proposals': { status: 503, detail: 'no vault configured' } })

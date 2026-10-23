@@ -12,14 +12,15 @@ from edda.config import ConfigError
 from edda.drivers.errors import DriverError
 from edda.kernel import KernelError
 from edda.llm.errors import LLMError
-from edda.models import JobRun
+from edda.models import JobOutcome, JobRun
 
 log = structlog.get_logger("edda.jobs.background")
 
 # Failures whose cause is outside the code, such as a model server that is not running: logged as one line.
 EXPECTED = (LLMError, KernelError, ConfigError, DriverError)
 
-Work = Callable[[], list[str]]
+Progress = Callable[[int, int], None]
+Work = Callable[[Progress], JobOutcome]
 Listener = Callable[[JobRun], None]
 
 
@@ -40,7 +41,7 @@ class Jobs:
         self._futures: list[Future[None]] = []
 
     def start(self, job: str, target: str, work: Work) -> JobRun:
-        """Queues ``work``, which returns the ids of the proposals it made."""
+        """Queues ``work``, which reports each turn through the callback it is given and returns what it made."""
         with self._lock:
             run = JobRun(id=f"run_{next(self._ids):04d}", job=job, target=target, state="queued", queued=_now())
             self._runs[run.id] = run
@@ -72,7 +73,7 @@ class Jobs:
     def _run(self, run_id: str, work: Work) -> None:
         self._update(run_id, state="running", started=_now())
         try:
-            proposals = work()
+            outcome = work(lambda turn, of: self._update(run_id, turn=turn, max_turns=of))
         except EXPECTED as exc:
             log.error("job_failed", run=run_id, error=str(exc))
             self._update(run_id, state="failed", finished=_now(), error=str(exc) or type(exc).__name__)
@@ -81,7 +82,7 @@ class Jobs:
             log.exception("job_failed", run=run_id)
             self._update(run_id, state="failed", finished=_now(), error=str(exc) or type(exc).__name__)
             return
-        self._update(run_id, state="done", finished=_now(), proposals=proposals)
+        self._update(run_id, state="done", finished=_now(), proposals=outcome.proposals, note=outcome.note)
 
     def _update(self, run_id: str, **changes: object) -> None:
         with self._lock:

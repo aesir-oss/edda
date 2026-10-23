@@ -3,8 +3,10 @@ import time
 
 import pytest
 
-from edda.jobs.background import Jobs
-from edda.models import JobRun
+from edda.jobs.background import Jobs, Progress
+from edda.models import JobOutcome, JobRun
+
+NOTHING = JobOutcome()
 
 
 def test_runs_jobs_in_order_and_reports_each_state() -> None:
@@ -12,12 +14,13 @@ def test_runs_jobs_in_order_and_reports_each_state() -> None:
     jobs = Jobs(listener=lambda run: heard.append((run.id, run.state)))
     gate = threading.Event()
 
-    def first() -> list[str]:
+    def first(progress: Progress) -> JobOutcome:
+        progress(1, 32)
         gate.wait(5)
-        return ["prop_000001"]
+        return JobOutcome(proposals=["prop_000001"], note="stopped at its limit of 32 model turns")
 
     one = jobs.start("ingest", "aaaa", first)
-    two = jobs.start("ingest", "bbbb", lambda: [])
+    two = jobs.start("ingest", "bbbb", lambda _: NOTHING)
     assert jobs.run(two.id) is not None
     assert [r.id for r in jobs.runs()] == ["run_0001", "run_0002"]
     gate.set()
@@ -25,20 +28,22 @@ def test_runs_jobs_in_order_and_reports_each_state() -> None:
 
     done = jobs.run(one.id)
     assert isinstance(done, JobRun)
-    assert (done.state, done.proposals) == ("done", ["prop_000001"])
+    assert (done.state, done.proposals, done.turn, done.max_turns) == ("done", ["prop_000001"], 1, 32)
+    assert done.note == "stopped at its limit of 32 model turns"
     assert done.started is not None and done.finished is not None
     for run in (one, two):
-        assert [state for run_id, state in heard if run_id == run.id] == ["queued", "running", "done"]
+        states = [state for run_id, state in heard if run_id == run.id]
+        assert states[0] == "queued" and states[-1] == "done" and set(states) == {"queued", "running", "done"}
     assert jobs.run("run_9999") is None
 
 
 def test_a_failing_job_is_recorded_not_lost() -> None:
     jobs = Jobs()
 
-    def broken() -> list[str]:
+    def broken(_: Progress) -> JobOutcome:
         raise RuntimeError("model went away")
 
-    def silent() -> list[str]:
+    def silent(_: Progress) -> JobOutcome:
         raise RuntimeError
 
     run = jobs.start("ingest", "aaaa", broken)
@@ -53,8 +58,8 @@ def test_a_failing_job_is_recorded_not_lost() -> None:
 def test_jobs_still_queued_at_shutdown_are_marked_failed() -> None:
     jobs = Jobs()
     gate = threading.Event()
-    jobs.start("ingest", "aaaa", lambda: [str(gate.wait(5))])
-    queued = jobs.start("ingest", "bbbb", lambda: [])
+    jobs.start("ingest", "aaaa", lambda _: JobOutcome(proposals=[str(gate.wait(5))]))
+    queued = jobs.start("ingest", "bbbb", lambda _: NOTHING)
     stopping = threading.Thread(target=jobs.shutdown)
     stopping.start()
     deadline = time.monotonic() + 5
@@ -72,7 +77,7 @@ def test_expected_failures_are_one_log_line(capsys: pytest.CaptureFixture[str]) 
 
     jobs = Jobs()
 
-    def offline() -> list[str]:
+    def offline(_: Progress) -> JobOutcome:
         raise LLMError("http://127.0.0.1:8080/v1/chat/completions did not answer; is the model server running?")
 
     run = jobs.start("ingest", "aaaa", offline)

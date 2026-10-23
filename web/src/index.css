@@ -324,3 +324,12 @@ textarea {
 .add-web input {
   flex: 1;
 }
+
+.job {
+  margin: 4px 0;
+}
+
+.job-note {
+  color: var(--bad);
+  font-size: 0.92rem;
+}
